@@ -1,0 +1,54 @@
+/* Sidebar styles */
+#sidebar {
+    position: fixed;
+    left: -250px;
+    width: 250px;
+    height: 100%;
+    background-color: #343a40;
+    transition: all 0.3s ease;
+    z-index: 1000;
+}
+
+#sidebar.active {
+    left: 0;
+}
+
+#sidebar .nav-link {
+    color: #fff;
+    cursor: pointer;
+}
+
+#sidebar .nav-link:hover {
+    color: #fff;
+    background-color: rgba(255, 255, 255, 0.2);
+}
+
+#sidebar .dropdown-menu {
+    background-color: #343a40;
+}
+
+#sidebar .dropdown-item {
+    color: #fff;
+    cursor: pointer;
+}
+
+#sidebar .dropdown-item:hover {
+    color: #fff;
+    background-color: rgba(255, 255, 255, 0.2);
+}
+
+/* Hamburger icon styles */
+#sidebarCollapse {
+    position: fixed;
+    top: 20px;
+    left: 20px;
+    z-index: 1001;
+    cursor: pointer;
+    border: none;
+    background-color: transparent;
+}
+
+#sidebarCollapse i {
+    font-size: 24px;
+    color: #fff;
+}

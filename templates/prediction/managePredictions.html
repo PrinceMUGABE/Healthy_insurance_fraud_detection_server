@@ -1,0 +1,96 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+   <meta charset="UTF-8">
+   <meta name="viewport" content="width=device-width, initial-scale=1.0">
+   <title>Insurances</title>
+   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.4/css/all.min.css">
+   <link rel="stylesheet" type="text/css" href="{% static 'css/manageInsurance.css' %}">
+</head>
+<body>
+   <!-- Left Sidebar -->
+   <div id="sidebarCollapse">
+       <i class="fas fa-bars text-dark"></i>
+   </div>
+   <div id="sidebar" class="bg-dark vh-100 p-3">
+       <!-- Sidebar content -->
+       <div class="d-flex align-items-center mb-4">
+           <i class="fas fa-hospital text-white me-2"></i>
+           <span class="text-white">Health Insurance Fraud Detection</span>
+       </div>
+       <div class="nav flex-column nav-pills">
+           <!-- Navigation links -->
+           <a class="nav-link text-white my-5" href="/user/admin_dashboard/">Dashboard</a>
+           <div class="nav-item dropdown my-5">
+               <a class="nav-link text-white dropdown-toggle" href="#" role="button" data-bs-toggle="dropdown" aria-expanded="false">
+                   People
+               </a>
+               <ul class="dropdown-menu bg-dark">
+                   <li><a class="dropdown-item text-white" id="userListLink" href="/user/users/">Users</a></li>
+                   <li><a class="dropdown-item text-white" href="/prediction/predictions/">Patients</a></li>
+                   <li><a class="dropdown-item text-white" href="/employee/employees/">Employee</a></li>
+               </ul>
+           </div>
+           <a class="nav-link text-white my-5 py-5" href="/insurance/insurances/">Insurance</a>
+           <div class="mt-auto my-5">
+               <a class="nav-link text-white" href="{% url 'logout' %}">Logout</a>
+           </div>
+       </div>
+   </div>
+   <!-- End Left Sidebar -->
+
+   <!-- Main Content -->
+    <div class="main-content">
+       <h1 class="text-center mb-5 py-5">Insurance Predictions</h1>
+        <div class="text-end mb-3">
+           <a href="/prediction/create_prediction/" class="btn btn-primary">Add New Insurance</a>
+       </div>
+       <!-- Table of Insurances -->
+       <div class="table-container">
+           <table class="table table-striped" id="tbl">
+               <!-- Table headers -->
+               <thead>
+                   <tr>
+                       <th>ID</th>
+                       <th>Firstname</th>
+                       <th>Lastname</th>
+                       <th>Phone</th>
+                       <th>Insurance</th>
+                       <th>Status</th>
+                       <th>Created Date</th>
+                       <th>Action</th>
+                   </tr>
+               </thead>
+               <!-- Table body -->
+               <tbody>
+                   <!-- Loop through insurances data -->
+                   {% for prediction in predictions %}
+                   <tr>
+                       <td>{{ prediction.id }}</td>
+                       <td>{{ prediction.first_name }}</td>
+                       <td>{{ prediction.last_name }}</td>
+                       <td>{{ prediction.phone }}</td>
+                       <td>{{ prediction.insurance }}</td>
+                       <td>{{ prediction.available }}</td>
+                       <td>{{ prediction.created_date }}</td>
+                       <td>
+                           <a href="#" class="btn btn-primary btn-sm">Edit</a>
+                           <a href="#" class="btn btn-danger btn-sm">Delete</a>
+                       </td>
+                   </tr>
+                   {% endfor %}
+               </tbody>
+           </table>
+       </div>
+   </div>
+   <!-- End Main Content -->
+
+
+
+   <!-- Scripts -->
+   <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+   <script src="{% static 'js/manageInsurance.js' %}"></script>
+</body>
+</html>

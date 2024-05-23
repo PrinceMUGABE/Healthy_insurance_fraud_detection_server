@@ -1,0 +1,47 @@
+/* Navbar styles */
+.navbar {
+    background-color: #333;
+    color: #fff;
+    padding: 10px 20px;
+}
+
+.navbar-brand {
+    color: #fff;
+    font-weight: bold;
+    text-decoration: none;
+}
+
+.navbar-menu {
+    display: none;
+}
+
+.navbar-menu.show {
+    display: block;
+}
+
+.navbar-menu ul {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+}
+
+.navbar-menu ul li {
+    margin-bottom: 10px;
+}
+
+.navbar-menu ul li a {
+    color: #fff;
+    text-decoration: none;
+    font-size: 16px;
+}
+
+/* Card styles */
+.card {
+    width: 400px;
+    max-width: 90%;
+    margin-top: 80px; /* Adjusted margin top to make space for fixed navbar */
+}
+
+.card-body {
+    padding: 20px;
+}

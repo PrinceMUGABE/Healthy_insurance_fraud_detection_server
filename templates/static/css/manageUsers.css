@@ -1,0 +1,179 @@
+/* Sidebar styles */
+#sidebar {
+    position: fixed;
+    left: -250px;
+    width: 250px;
+    height: 100%;
+    background-color: #343a40;
+    transition: all 0.3s ease;
+    z-index: 1000;
+}
+
+#sidebar.active {
+    left: 0;
+}
+
+#sidebar .nav-link {
+    color: #fff;
+    cursor: pointer;
+}
+
+#sidebar .nav-link:hover {
+    color: #fff;
+    background-color: rgba(255, 255, 255, 0.2);
+}
+
+#sidebar .dropdown-menu {
+    background-color: #343a40;
+}
+
+#sidebar .dropdown-item {
+    color: #fff;
+    cursor: pointer;
+}
+
+#sidebar .dropdown-item:hover {
+    color: #fff;
+    background-color: rgba(255, 255, 255, 0.2);
+}
+
+/* Hamburger icon styles */
+#sidebarCollapse {
+    position: fixed;
+    top: 20px;
+    left: 20px;
+    z-index: 1001;
+    cursor: pointer;
+    border: none;
+    background-color: transparent;
+}
+
+#sidebarCollapse i {
+    font-size: 24px;
+    color: #fff;
+}
+
+/*Table of users*/
+
+.table-container {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    padding-bottom: 8rem;
+}
+#tbl {
+    width: 66%; /* 2/3 of the container width */
+}
+
+ #user-info {
+    position: absolute;
+
+    left: 10px;
+    display: flex;
+    align-items: center;
+    color: #fff;
+    font-size: 16px;
+}
+.notification-icon {
+    position: relative;
+    margin-left: 20px;
+}
+.notification-badge {
+    position: absolute;
+    top: -5px;
+    right: -5px;
+    background-color: red;
+    color: #fff;
+    border-radius: 50%;
+    padding: 5px 8px;
+    font-size: 12px;
+}
+
+/* adminDashboard.css */
+/* The Modal (background) */
+.modal {
+  display: none; /* Hidden by default */
+  position: fixed; /* Stay in place */
+  z-index: 1; /* Sit on top */
+  left: 0;
+  top: 0;
+  width: 50%; /* Full width */
+  height: 100%; /* Full height */
+  overflow: auto; /* Enable scroll if needed */
+  background-color: rgba(0,0,0,0.4); /* Black w/ opacity */
+}
+
+/* Modal Content/Box */
+.modal-content {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  width: 100%;
+  margin-left: 20px;
+}
+
+.card {
+  max-width: 400px; /* Set maximum width of card */
+  width: 100%; /* Full width */
+}
+
+/* Close Button */
+.close {
+  color: #aaa;
+  float: right;
+  font-size: 28px;
+  font-weight: bold;
+}
+
+.close:hover,
+.close:focus {
+  color: black;
+  text-decoration: none;
+  cursor: pointer;
+}
+
+
+/* Existing CSS styles... */
+/* Custom CSS for the new division */
+.today-users {
+    display: none;
+}
+
+@media (max-width: 767.98px) {
+    /* CSS for smaller screens */
+    .today-users {
+        display: block;
+        position: fixed;
+        bottom: 0;
+        left: 0;
+        width: 100%;
+        background-color: #f8f9fa;
+        padding: 20px;
+        border-top: 1px solid #dee2e6;
+        z-index: 1000;
+    }
+    .main-content {
+        margin-bottom: 100px; /* Adjust margin to avoid overlapping */
+    }
+}
+
+@media (min-width: 768px) {
+    /* CSS for larger screens */
+    .today-users {
+        display: block;
+        position: fixed;
+        top: 0;
+        right: 0;
+        width: 300px;
+        background-color: #f8f9fa;
+        padding: 20px;
+        border-left: 1px solid #dee2e6;
+        height: 100vh;
+        overflow-y: auto;
+        z-index: 1000;
+    }
+    .main-content {
+        margin-right: 300px; /* Adjust margin to avoid overlapping */
+    }
+}
