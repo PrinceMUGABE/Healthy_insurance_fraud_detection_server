@@ -8,6 +8,7 @@ from patientApp.models import Client
 from django.shortcuts import render, redirect
 from django.contrib import messages
 import base64
+
 import cv2
 import numpy as np
 from PIL import Image

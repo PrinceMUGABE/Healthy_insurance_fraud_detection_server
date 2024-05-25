@@ -1,156 +1,151 @@
-from django.shortcuts import render, redirect
-from django.contrib.auth.hashers import make_password
+from django.shortcuts import get_object_or_404, render, redirect
+from django.contrib.auth.hashers import make_password, check_password
 from django.core.mail import send_mail
 from django.http import JsonResponse
 from django.conf import settings
 from django.views.decorators.csrf import csrf_exempt
+from django.contrib.auth import logout
+from django.utils import timezone
 from .models import User
+from insurancePredictionApp.models import Prediction
+from insuranceApp.models import Insurance
 from django.db import IntegrityError
 from django.contrib.auth import authenticate, login
-from django.contrib.auth.hashers import check_password
 from django.contrib import messages
-from django.http import JsonResponse
-from django.shortcuts import render, get_object_or_404
-from django.contrib.auth import logout
-from insurancePredictionApp.models import Prediction
+from rest_framework.decorators import api_view
+from rest_framework.response import Response
+from rest_framework import status
 
 
-def get_signup_page(request):
-    return render(request, "user/signup.html")
-#
-#
-
-
+@api_view(['POST'])
 def create_user(request):
-    if request.method == 'POST':
-        # Get user data from the request
-        username = request.POST.get('username')
-        email = request.POST.get('email')
-        role = request.POST.get('role')
-        password = request.POST.get('password')
+    username = request.data.get('username')
+    email = request.data.get('email')
+    role = request.data.get('role')
+    password = request.data.get('password')
 
-        # Check if all required fields are provided
-        if not all([username, email, role, password]):
-            return JsonResponse({'status': 'error', 'message': 'All fields are required'})
+    if not all([username, email, role, password]):
+        return Response({'status': 'error', 'message': 'All fields are required'}, status=status.HTTP_400_BAD_REQUEST)
 
-        # Hash the password before saving
-        hashed_password = make_password(password)
+    hashed_password = make_password(password)
+    try:
+        user = User.objects.create(username=username, email=email, role=role, password=hashed_password)
+        subject = 'User Registration Confirmation'
+        message = 'Thank you for registering with us!'
+        from_email = settings.EMAIL_HOST_USER
+        recipient_list = [email]
+        send_mail(subject, message, from_email, recipient_list)
+        return Response({'status': 'success', 'message': 'User created successfully'}, status=status.HTTP_201_CREATED)
+    except IntegrityError as e:
+        return Response({'status': 'error', 'message': str(e)}, status=status.HTTP_400_BAD_REQUEST)
+    except Exception as e:
+        return Response({'status': 'error', 'message': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
-        try:
-            # Save the user to the database
-            user = User.objects.create(username=username, email=email, role=role, password=hashed_password)
-            # Send email confirmation
-            subject = 'User Registration Confirmation'
-            message = 'Thank you for registering with us!'
-            from_email = settings.EMAIL_HOST_USER
-            recipient_list = [email]
-            send_mail(subject, message, from_email, recipient_list)
-
-            return JsonResponse({'status': 'success', 'message': 'User created successfully'})
-        except IntegrityError as e:
-            # Handle the case of duplicate email
-            return JsonResponse({'status': 'error', 'message': str(e)})
-        except Exception as e:
-            return JsonResponse({'status': 'error', 'message': str(e)})
-    else:
-        return JsonResponse({'status': 'error', 'message': 'Unsupported request method'})
-
-
-from django.contrib.auth.hashers import check_password
-
-from django.contrib.auth.hashers import check_password
-
+@api_view(['POST'])
 def signin(request):
-    if request.method == 'POST':
-        username = request.POST.get('username')
-        password = request.POST.get('password')
+    username = request.data.get('username')
+    password = request.data.get('password')
 
-        print('\nUsername persisted:', username)
-        print('\n\nPassword persisted: ', password)
+    try:
+        user = User.objects.get(username=username)
+        if check_password(password, user.password):
+            if user.role == 'admin':
+                return Response({'redirect': 'admin_dashboard'}, status=status.HTTP_200_OK)
+            elif user.role == 'doctor':
+                return Response({'redirect': 'doctor_dashboard'}, status=status.HTTP_200_OK)
+            elif user.role == 'investigator':
+                return Response({'redirect': 'investigator_dashboard'}, status=status.HTTP_200_OK)
+            elif user.role == 'employee':
+                return Response({'redirect': 'employee_dashboard'}, status=status.HTTP_200_OK)
+            else:
+                return Response({'status': 'error', 'message': 'Invalid role.'}, status=status.HTTP_400_BAD_REQUEST)
+        else:
+            return Response({'status': 'error', 'message': 'Invalid password.'}, status=status.HTTP_401_UNAUTHORIZED)
+    except User.DoesNotExist:
+        return Response({'status': 'error', 'message': 'Invalid username.'}, status=status.HTTP_404_NOT_FOUND)
 
-        try:
-            user = User.objects.get(username=username)
-            print('\nUsername is found\n')
-            if check_password(password, user.password):
-                print('\nPassword is correct\n')
-                # Check user role and redirect accordingly
-                # Check user role and redirect accordingly
-                if user.role == 'admin':
-                    return redirect('admin_dashboard')
-                elif user.role == 'doctor':
 
-                    return redirect('doctor_dashboard')
-                elif user.role == 'investigator':
-                    return redirect('investigator_dashboard')
-                elif user.role == 'employee':
-                    return redirect('employee_dashboard')
-                else:
-                    print('Invalid password\n')
-                    messages.error(request, 'Invalid password.')
-                    return render(request, "user/login.html")
-        except User.DoesNotExist:
-                print('Username not found\n')
-                messages.error(request, 'Invalid username.')
-                return render(request, "user/login.html")
 
-    return render(request, "user/login.html")
-
-def admin_dashboard(request):
-    return render(request, 'user/adminDashboard.html')
-
+@api_view(['GET'])
 def doctor_dashboard(request):
-    # Retrieve all predictions
     predictions = Prediction.objects.all()
-    return render(request, 'user/doctorDashboard.html', {'predictions': predictions})
-
-def investigator_dashboard(request):
-    return render(request, 'user/investigatorDashboard.html')
+    return Response({'predictions': [prediction.id for prediction in predictions]}, status=status.HTTP_200_OK)
 
 
-def employee_dashboard(request):
-    return render(request, 'user/employeeDashboard.html')
-
-
+@api_view(['GET'])
 def list_users(request):
-    users = User.objects.all().values('id', 'username', 'email', 'role')  # Query only necessary fields
-    return render(request, 'user/manageUsers.html', {'users': users})
+    users = User.objects.all().values('id', 'username', 'email', 'role')
+    return Response({'users': list(users)}, status=status.HTTP_200_OK)
 
+@api_view(['POST'])
+def update_user_data(request, user_id):
+    user = get_object_or_404(User, pk=user_id)
+    username = request.data.get('username')
+    email = request.data.get('email')
+    role = request.data.get('role')
 
-def update_user_data(request, id):
-    user = get_object_or_404(User, pk=id)
-    if request.method == 'POST':
+    try:
+        user.username = username
+        user.email = email
+        user.role = role
+        user.save()
+        return Response({'status': 'success', 'message': 'User updated successfully'}, status=status.HTTP_200_OK)
+    except User.DoesNotExist:
+        return Response({'status': 'error', 'message': 'User not found.'}, status=status.HTTP_404_NOT_FOUND)
 
-        username = request.POST.get('username')
-        email = request.POST.get('email')
-        role = request.POST.get('role')
-        try:
-
-            # user = User.object.get(id=id)
-            user.username = username
-            user.email = email
-            user.role = role
-
-            user.save()
-
-            return redirect('user/users')
-        except User.DoesNotExist:
-            return redirect('user/users')
-
-
+@api_view(['POST'])
 def logout_user(request):
     logout(request)
-    # Redirect to a page after logout, for example, login page
-    return redirect('signin')
+    return Response({'status': 'success', 'message': 'Logged out successfully'}, status=status.HTTP_200_OK)
 
-
-from django.utils import timezone
-
+@api_view(['GET'])
 def today_users(request):
-    # Calculate today's date
     today = timezone.now().date()
-
-    # Filter users created today
     users = User.objects.filter(created_date__date=today).values('username', 'email')
+    return Response({'today_users': list(users)}, status=status.HTTP_200_OK)
 
-    # Render the template with today's users
-    return render(request, 'user/manageUsers.html', {'today_users': list(users)})
+
+
+
+from rest_framework.response import Response
+from rest_framework.decorators import api_view
+
+@api_view(['GET'])
+def admin_dashboard(request):
+    data = {
+        "message": "Admin Dashboard Data",
+        # Add more relevant data here
+    }
+    return Response(data)
+
+@api_view(['GET'])
+def get_signup_page(request):
+    data = {
+        "message": "Signup Page Data",
+        # Add more relevant data here
+    }
+    return Response(data)
+
+@api_view(['GET'])
+def index(request):
+    data = {
+        "message": "Index Page Data",
+        # Add more relevant data here
+    }
+    return Response(data)
+
+@api_view(['GET'])
+def investigator_dashboard(request):
+    data = {
+        "message": "Investigator Dashboard Data",
+        # Add more relevant data here
+    }
+    return Response(data)
+
+@api_view(['GET'])
+def employee_dashboard(request):
+    data = {
+        "message": "Employee Dashboard Data",
+        # Add more relevant data here
+    }
+    return Response(data)
