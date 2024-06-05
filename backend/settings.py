@@ -5,12 +5,15 @@ import environ
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 
+import environ
+
 env = environ.Env()
 
 environ.Env.read_env()
 
-SECRET_KEY = 'django-insecure-3&qyto@en$od2dnauag^6gh#l=rjv#b%70r+$ozbd35vsj=#q0'
-DEBUG = False
+
+SECRET_KEY = env('SECRET_KEY', default='django-insecure-3&qyto@en$od2dnauag^6gh#l=rjv#b%70r+$ozbd35vsj=#q0')
+DEBUG = True
 ALLOWED_HOSTS = ['*']
 
 INSTALLED_APPS = [
@@ -32,7 +35,7 @@ INSTALLED_APPS = [
 MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
-    'corsheaders.middleware.CorsMiddleware',
+    'corsheaders.middleware.CorsMiddleware',  # CORS middleware should be placed early
     'django.middleware.common.CommonMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
     'django.contrib.auth.middleware.AuthenticationMiddleware',
@@ -41,6 +44,11 @@ MIDDLEWARE = [
 ]
 
 ROOT_URLCONF = 'backend.urls'
+
+
+
+# settings.py
+import os
 
 TEMPLATES = [
     {
@@ -58,6 +66,9 @@ TEMPLATES = [
     },
 ]
 
+
+
+
 WSGI_APPLICATION = 'backend.wsgi.application'
 
 # DATABASES = {
@@ -65,28 +76,33 @@ WSGI_APPLICATION = 'backend.wsgi.application'
 #         'ENGINE': 'django.db.backends.mysql',
 #         'NAME': 'fraud_detection_app',
 #         'USER': 'root',
-#         # 'PASSWORD': '',
+#         'PASSWORD': '',  # Password should be set in the .env file
 #         'HOST': 'localhost',
 #         'PORT': '3306',
 #     }
 # }
 
+
 DATABASES = {
     'default': dj_database_url.parse(env('DATABASE_URL'))
-
 }
+
+
+
 CORS_ORIGIN_ALLOW_ALL = True
-CORS_ALLOWED_ORIGINS = [
+CORS_ALLOWED_ORIGINS = env.list('CORS_ALLOWED_ORIGINS', default=[
     "http://localhost:3000",
     "http://127.0.0.1:3000",
-]
+    "http://127.0.0.1:5500",
+    "http://localhost:8000",
+])
 
 EMAIL_BACKEND = 'django.core.mail.backends.smtp.EmailBackend'
 EMAIL_HOST = 'smtp.gmail.com'
 EMAIL_PORT = 587
 EMAIL_USE_TLS = True
-EMAIL_HOST_USER = 'princemugabe568@gmail.com'
-EMAIL_HOST_PASSWORD = 'mram vzsp iphw ielb'
+EMAIL_HOST_USER = env('EMAIL_HOST_USER', default='princemugabe567@gmail.com')
+EMAIL_HOST_PASSWORD = env('EMAIL_HOST_PASSWORD', default='tnup pcpd eqhb yqvq')
 
 AUTH_PASSWORD_VALIDATORS = [
     {
@@ -108,29 +124,47 @@ TIME_ZONE = 'UTC'
 USE_I18N = True
 USE_TZ = True
 
+
+
+# Static files (CSS, JavaScript, Images)
+# https://docs.djangoproject.com/en/5.0/howto/static-files/
+
 STATIC_URL = '/static/'
-STATIC_ROOT = os.path.join(BASE_DIR, 'staticfiles')
 
-# STATICFILES_DIRS = [
-#     os.path.join(BASE_DIR, 'templates', 'user', 'static'),
-#     os.path.join(BASE_DIR, 'templates', 'insurance', 'static'),
-#     os.path.join(BASE_DIR, 'templates', 'prediction', 'static'),
-# ]
+# Define the base directory for static files
+STATIC_DIR = BASE_DIR / 'statics'
 
 
-STATIC_DIR = BASE_DIR / 'static'
-# Location of static files
 STATICFILES_DIRS = [
-    STATIC_DIR,
+    os.path.join(BASE_DIR,  'statics'),
 ]
 
 
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
-CSRF_COOKIE_SECURE = False
+CSRF_COOKIE_SECURE = not DEBUG
 CSRF_COOKIE_HTTPONLY = False
 CSRF_COOKIE_SAMESITE = 'Lax'
 CSRF_COOKIE_NAME = 'csrftoken'
 
 MEDIA_URL = '/media/'
 MEDIA_ROOT = os.path.join(BASE_DIR, 'media')
+
+
+
+
+# settings.py
+LOGGING = {
+    'version': 1,
+    'disable_existing_loggers': False,
+    'handlers': {
+        'console': {
+            'class': 'logging.StreamHandler',
+        },
+    },
+    'root': {
+        'handlers': ['console'],
+        'level': 'DEBUG',
+    },
+}
+

@@ -9,89 +9,106 @@
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.4/css/all.min.css">
     <link rel="stylesheet" type="text/css" href="{% static 'css/newClient.css' %}">
     <link rel="stylesheet" type="text/css" href="{% static 'css/newInsurance.css' %}">
+    <style>
+        body, html {
+            height: 100%;
+        }
+        .card {
+            max-width: 600px;
+            margin: auto;
+            margin-top: 50px; /* Adjust as needed */
+        }
+        .vertical-center {
+            min-height: 100%;
+            display: flex;
+            align-items: center;
+        }
+    </style>
 </head>
-<body>
-<div class="container mb-lg-5 mt-lg-5">
-    <div class="title">Validate Insurance</div>
-    <div class="content">
-        {% if messages %}
-            {% for message in messages %}
-                <div class="alert alert-{{ message.tags }}" role="alert">
-                    {{ message }}
-                </div>
-            {% endfor %}
-        {% endif %}
-        <form id="patientForm" enctype="multipart/form-data" action="{% url 'save_prediction' %}" method="post">
-            {% csrf_token %}
-            <div class="user-details">
-                <div class="input-box">
-                    <span class="details">First Name</span>
-                    <input type="text" name="firstname" placeholder="First Name" required>
-                </div>
-                <div class="input-box">
-                    <span class="details">Last Name</span>
-                    <input type="text" name="lastname" placeholder="Last Name" required>
-                </div>
-                <div class="input-box">
-                    <span class="details">Phone</span>
-                    <input type="text" name="phone" placeholder="Phone" required>
-                </div>
-                <div class="input-box">
-                    <span class="details">Gender</span>
-                    <select name="gender" required>
-                        <option value="" selected disabled>Select Gender</option>
-                        <option value="Male">Male</option>
-                        <option value="Female">Female</option>
-                        <option value="Other">Other</option>
-                    </select>
-                </div>
-                <div class="input-box">
-                    <span class="details">Marital Status</span>
-                    <select name="marital_status" required>
-                        <option value="" selected disabled>Select Marital Status</option>
-                        <option value="Single">Single</option>
-                        <option value="Married">Married</option>
-                        <option value="Divorced">Divorced</option>
-                        <option value="Widowed">Widowed</option>
-                        <option value="separated">Separated</option>
-                    </select>
-                </div>
-                <div class="input-box">
-                    <span class="details">Insurance</span>
-                    <select name="insurance" required>
-                        <option value="" selected disabled>Select Insurance</option>
-                        {% for insurance in insurances %}
-                            <option value="{{ insurance.id }}">{{ insurance.name }}</option>
-                        {% endfor %}
-                    </select>
-                </div>
-                <div class="input-box">
-                    <span class="details">Address</span>
-                    <input type="text" name="address" placeholder="Address" required>
-                </div>
-                <div class="input-box" id="pictureContainer">
-                    <span class="details">Picture</span>
-                    <video id="camera" width="100%" height="auto" autoplay></video>
-                    <button type="button" id="captureBtn">Capture Picture</button>
-                    <input type="hidden" name="picture" id="pictureInput" required>
-                </div>
-                <div class="input-box" id="displayPicture" style="display: none;">
-                    <img id="capturedImage" width="100%" height="auto">
-                    <button type="button" class="btn btn-danger" id="cancelBtn">Cancel</button>
-                </div>
+<body class="vertical-center">
+    <div class="container">
+        <div class="card shadow">
+            <div class="card-header text-center">
+                <h2>Validate Insurance</h2>
             </div>
-            <div class="input-box">
-                <div class="button">
-                    <input type="submit" value="Register">
-                </div>
-                <div class="button">
-                    <a class="btn btn-danger" type="button" href="{% url 'predictions' %}">Cancel</a>
-                </div>
+            <div class="card-body">
+                {% if messages %}
+                    {% for message in messages %}
+                        <div class="alert alert-{{ message.tags }}" role="alert">
+                            {{ message }}
+                        </div>
+                    {% endfor %}
+                {% endif %}
+                <form id="patientForm" enctype="multipart/form-data" action="{% url 'save_prediction' %}" method="post">
+                    {% csrf_token %}
+                    <div class="user-details">
+                        <div class="mb-3">
+                            <label class="form-label">First Name</label>
+                            <input type="text" name="firstname" class="form-control" placeholder="First Name" required>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">Last Name</label>
+                            <input type="text" name="lastname" class="form-control" placeholder="Last Name" required>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">Phone</label>
+                            <input type="text" name="phone" class="form-control" placeholder="Phone" required>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">Gender</label>
+                            <select name="gender" class="form-select" required>
+                                <option value="" selected disabled>Select Gender</option>
+                                <option value="Male">Male</option>
+                                <option value="Female">Female</option>
+                                <option value="Other">Other</option>
+                            </select>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">Marital Status</label>
+                            <select name="marital_status" class="form-select" required>
+                                <option value="" selected disabled>Select Marital Status</option>
+                                <option value="Single">Single</option>
+                                <option value="Married">Married</option>
+                                <option value="Divorced">Divorced</option>
+                                <option value="Widowed">Widowed</option>
+                                <option value="separated">Separated</option>
+                            </select>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">Insurance</label>
+                            <select name="insurance" class="form-select" required>
+                                <option value="" selected disabled>Select Insurance</option>
+                                {% for insurance in insurances %}
+                                    <option value="{{ insurance.id }}">{{ insurance.name }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">Address</label>
+                            <input type="text" name="address" class="form-control" placeholder="Address" required>
+                        </div>
+                        <div class="mb-3" id="pictureContainer">
+                            <label class="form-label">Picture</label>
+                            <div class="d-flex flex-column align-items-center">
+                                <video id="camera" width="100%" height="auto" autoplay></video>
+                                <button type="button" id="captureBtn" class="btn btn-primary mt-2">Capture Picture</button>
+                            </div>
+                            <input type="hidden" name="picture" id="pictureInput" required>
+                        </div>
+                        <div class="mb-3" id="displayPicture" style="display: none;">
+                            <img id="capturedImage" width="100%" height="auto" class="img-fluid">
+                            <button type="button" class="btn btn-danger mt-2" id="cancelBtn">Cancel</button>
+                        </div>
+                    </div>
+                    <div class="d-flex justify-content-between">
+                        <button type="submit" class="btn btn-success">Register</button>
+                        <a class="btn btn-danger" href="{% url 'predictions' %}">Cancel</a>
+                    </div>
+                </form>
             </div>
-        </form>
+        </div>
     </div>
-</div>
-<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
-<script src="{% static 'js/newClient.js' %}"></script>
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="{% static 'js/newClient.js' %}"></script>
 </body>
 </html>

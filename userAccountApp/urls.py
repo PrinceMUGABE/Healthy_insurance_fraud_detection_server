@@ -1,22 +1,25 @@
 from django.urls import path
 from . import views
-from django.conf import settings
-from django.conf.urls.static import static
-from django.urls import path, include
-from django.contrib import admin
-from userAccountApp import views as user_views
 
 urlpatterns = [
     path('', views.index, name='index'),
-    path('create/', views.get_signup_page, name='signup'),
-    path('save/', views.create_user, name='create'),
+    path('create/', views.create_user, name='signup'),
+    path('login/', views.get_login_page, name='login'),
     path('signin/', views.signin, name='signin'),
-    path('admin_dashboard/', views.admin_dashboard, name='admin_dashboard'),
+    path('user/admin_dashboard/', views.admin_dashboard, name='admin_dashboard'),
     path('doctor_dashboard/', views.doctor_dashboard, name='doctor_dashboard'),
     path('employee_dashboard/', views.employee_dashboard, name='employee_dashboard'),
     path('investigator_dashboard/', views.investigator_dashboard, name='investigator_dashboard'),
-    path('users/', views.list_users, name='list_users'),
-    path('update/<int:user_id>/', views.update_user_data, name='update_user_data'),
+    path('user/users/', views.list_users, name='list_users'),
+    path('update/<int:user_id>/', views.update_user, name='update_user'),
+    path('delete/<int:user_id>/', views.delete_user, name='delete_user'),
+    path('user/<int:user_id>/', views.get_user, name='get_user'),
     path('logout/', views.logout_user, name='logout'),
-    path('today/', views.today_users, name='today_users'),
+    path('user/today/', views.today_users, name='today_users'),
+    path('user/users/download/pdf/', views.download_users_pdf, name='download_users_pdf'),
+    path('user/users/download/excel/', views.download_users_excel, name='download_users_excel'),
+    
+    
+    path('prediction-trends/', views.prediction_trends, name='prediction_trends'),
+    path('prediction/available_predictions_today/', views.available_predictions_today, name='available_predictions_today'),
 ]

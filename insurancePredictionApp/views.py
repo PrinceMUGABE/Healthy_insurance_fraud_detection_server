@@ -39,26 +39,123 @@ import os
 model_folder = os.path.join(settings.BASE_DIR, 'templates', 'static', 'models')
 
 
+
+
+# View to return total available predictions
+from django.http import JsonResponse
+from .models import Prediction
+
+from django.http import JsonResponse
+from .models import Prediction
+
+def total_available_predictions(request):
+    total_available = Prediction.objects.all().count()
+    total_frauded = Prediction.objects.filter(available=False).count()
+    total_valid = Prediction.objects.filter(available=True).count()
+    return JsonResponse({'total_available_predictions': total_available, 'total_frauded': total_frauded, 'total_valid': total_valid})
+
+
+
+
+# View to return institution predictions by status
+from django.http import JsonResponse
+from django.db.models import Count
+from .models import Prediction
+
+from django.http import JsonResponse
+from django.db.models import Count
+from .models import Prediction
+
+def institution_predictions(request):
+    institution_data = Prediction.objects.values('insurance__name', 'available').annotate(prediction_count=Count('id'))
+
+    institution_counts = {}
+    for data in institution_data:
+        insurance_name = data['insurance__name']
+        available = data['available']
+        prediction_count = data['prediction_count']
+
+        if insurance_name not in institution_counts:
+            institution_counts[insurance_name] = {'True': 0, 'False': 0}
+
+        if available:
+            institution_counts[insurance_name]['True'] = prediction_count
+        else:
+            institution_counts[insurance_name]['False'] = prediction_count
+
+    return JsonResponse(institution_counts)
+
+
+
+
+
 # Initialize TF-IDF vectorizer
 tfidf_vectorizer = TfidfVectorizer()
 
+from django.core.paginator import Paginator, EmptyPage, PageNotAnInteger
+
+from django.core.paginator import Paginator, PageNotAnInteger, EmptyPage
+from django.db.models import Q
+from django.shortcuts import render
+from .models import Prediction
+
+from rest_framework.decorators import api_view
+from rest_framework.response import Response
+from django.db.models import Q
+from .models import Prediction
+from .serializers import PredictionSerializer
+from django.core.paginator import Paginator
+
 @api_view(['GET'])
 def display_predictions(request):
-    predictions = Prediction.objects.all()
-    serializer = PredictionSerializer(predictions, many=True)
-    return Response(serializer.data)
+    search_query = request.GET.get('search', '')
 
+    if search_query:
+        all_predictions = Prediction.objects.filter(
+            Q(first_name__icontains=search_query) |
+            Q(last_name__icontains=search_query) |
+            Q(phone__icontains=search_query) |
+            Q(insurance__name__icontains=search_query) |
+            Q(available__icontains=search_query) |
+            Q(created_date__icontains=search_query)
+        )
+    else:
+        all_predictions = Prediction.objects.all()
+
+    predictions_per_page = 5
+    paginator = Paginator(all_predictions, predictions_per_page)
+    page_number = request.GET.get('page', 1)
+
+    try:
+        predictions_page = paginator.page(page_number)
+    except PageNotAnInteger:
+        predictions_page = paginator.page(1)
+    except EmptyPage:
+        predictions_page = paginator.page(paginator.num_pages)
+
+    serializer = PredictionSerializer(predictions_page, many=True)
+
+    return Response({
+        'predictions': serializer.data,
+        'page': predictions_page.number,
+        'num_pages': paginator.num_pages,
+        'has_next': predictions_page.has_next(),
+        'has_previous': predictions_page.has_previous(),
+    }, status=status.HTTP_200_OK)
+
+
+from rest_framework.decorators import api_view
+from rest_framework.response import Response
+from .models import Insurance
+from insuranceApp.serializers import InsuranceSerializer
 
 @api_view(['GET'])
 def get_create_prediction_page(request):
     insurances = Insurance.objects.all()
     serializer = InsuranceSerializer(insurances, many=True)
-    return Response(serializer.data)
+    return Response({'insurances': serializer.data}, status=status.HTTP_200_OK)
 
 
-# def get_create_prediction_page(request):
-#     insurances = Insurance.objects.all()
-#     return render(request, 'prediction/create_new_prediction.html', {'insurances': insurances})
 
 
 
@@ -130,180 +227,57 @@ def compare_images_content(submitted_picture, existing_pictures):
     return False
 
 
+from rest_framework.decorators import api_view
+from rest_framework.response import Response
+from rest_framework import status
+import base64
+import cv2
+import numpy as np
+import random
+import string
+import os
+import traceback
+from .models import Prediction
+from patientApp.models import Client
+
+from django.core.files.base import ContentFile
+from django.core.files.storage import FileSystemStorage
+
+@api_view(['POST'])
 def save_prediction(request):
-    if request.method == 'POST':
-        try:
-            # Extract form data
-            first_name = request.POST.get('firstname')
-            last_name = request.POST.get('lastname')
-            phone = request.POST.get('phone')
-            gender = request.POST.get('gender')
-            marital_status = request.POST.get('marital_status')
-            insurance_id = request.POST.get('insurance')
-            address = request.POST.get('address')
-            picture_data = request.POST.get('picture')
+    try:
+        data = request.data
+        first_name = data.get('firstname')
+        last_name = data.get('lastname')
+        phone = data.get('phone')
+        gender = data.get('gender')
+        marital_status = data.get('marital_status')
+        insurance_id = data.get('insurance')
+        address = data.get('address')
+        picture_data = data.get('picture')
 
-            # Mapping full strings to single-character codes
-            gender_map = {
-                'Male': 'M',
-                'Female': 'F',
-                'Other': 'O'
-            }
+        gender_map = {
+            'Male': 'M',
+            'Female': 'F',
+            'Other': 'O'
+        }
 
-            marital_status_map = {
-                'Single': 'S',
-                'Married': 'M',
-                'Divorced': 'D',
-                'Widowed': 'W',
-                'Other': 'O'
-            }
+        marital_status_map = {
+            'Single': 'S',
+            'Married': 'M',
+            'Divorced': 'D',
+            'Widowed': 'W',
+            'Other': 'O'
+        }
 
-            # Convert the submitted values
-            gender_code = gender_map.get(gender)
-            marital_status_code = marital_status_map.get(marital_status)
+        gender_code = gender_map.get(gender)
+        marital_status_code = marital_status_map.get(marital_status)
 
-            if picture_data:
-                # Convert base64 image data to bytes
-                picture_bytes = base64.b64decode(picture_data.split(',')[1])
+        if picture_data:
+            picture_bytes = base64.b64decode(picture_data.split(',')[1])
+            submitted_image = cv2.imdecode(np.frombuffer(picture_bytes, np.uint8), cv2.IMREAD_COLOR)
 
-                # Read the submitted image
-                submitted_image = cv2.imdecode(np.frombuffer(picture_bytes, np.uint8), cv2.IMREAD_COLOR)
-                
-                if submitted_image is None:
-                    print("Submitted image could not be read.")
-                    messages.error(request, 'Submitted image could not be read.')
-                    # Save the Prediction object with available set to False
-                    prediction = Prediction(
-                        first_name=first_name,
-                        last_name=last_name,
-                        phone=phone,
-                        gender=gender_code,
-                        marital_status=marital_status_code,
-                        insurance_id=insurance_id,
-                        address=address,
-                        available=False
-                    )
-                    prediction.save()
-                    return redirect('create_prediction')
-
-                # Check if the image has high enough quality for face recognition
-                if not is_high_quality(submitted_image):
-                    messages.error(request, 'Image quality is too low. Please submit a higher quality image.')
-                    # Save the Prediction object with available set to False
-                    prediction = Prediction(
-                        first_name=first_name,
-                        last_name=last_name,
-                        phone=phone,
-                        gender=gender_code,
-                        marital_status=marital_status_code,
-                        insurance_id=insurance_id,
-                        address=address,
-                        available=False
-                    )
-                    prediction.save()
-                    return redirect('create_prediction')
-
-                # Detect faces in the image using face_recognition library
-                face_locations = face_recognition.face_locations(submitted_image)
-                if not face_locations:
-                    messages.error(request, 'No faces detected in the image. Please submit a picture containing a face.')
-                    # Save the Prediction object with available set to False
-                    prediction = Prediction(
-                        first_name=first_name,
-                        last_name=last_name,
-                        phone=phone,
-                        gender=gender_code,
-                        marital_status=marital_status_code,
-                        insurance_id=insurance_id,
-                        address=address,
-                        available=False
-                    )
-                    prediction.save()
-                    return redirect('create_prediction')
-
-                # Save the picture in 'retrieved_pictures' folder
-                phone_suffix = phone[-3:]
-                last_name_prefix = last_name[:2].upper()
-                random_suffix = ''.join(random.choices(string.ascii_uppercase + string.digits, k=3))
-                client_code = f"{phone_suffix}{last_name_prefix}{random_suffix}"
-                picture_name = f"{client_code}.jpg"
-                
-                retrieved_pictures_folder = os.path.join(BASE_DIR, 'templates', 'static', 'retrieved_pictures')
-                if not os.path.exists(retrieved_pictures_folder):
-                    os.makedirs(retrieved_pictures_folder)
-                picture_path = os.path.join(retrieved_pictures_folder, picture_name)
-                
-                # Save the picture using FileSystemStorage
-                fs = FileSystemStorage(location=retrieved_pictures_folder)
-                filename = fs.save(picture_name, ContentFile(picture_bytes))
-
-                # Initialize prediction_success to False
-                prediction_success = False
-
-                # Retrieve all submitted pictures
-                submitted_pictures = retrieve_submitted_pictures()
-
-                print(f"Number of retrieved pictures: {len(submitted_pictures)}")
-
-                for submitted_picture_path in submitted_pictures:
-                    if submitted_picture_path.endswith('.jpg'):
-                        print(f"Attempting to read: {submitted_picture_path}")
-                        stored_image_path = os.path.join(BASE_DIR, 'templates', 'static', 'submitted_pictures', submitted_picture_path)
-                        stored_image_contents = cv2.imread(stored_image_path)
-
-                        if stored_image_contents is not None:
-                            is_similar = compare_images_content(submitted_image, [stored_image_contents])
-
-                            if is_similar:
-                                client_code = submitted_picture_path[:5]
-                                print(f'\n\nClient Code is: {client_code}\n\n')
-
-                                client_query = Client.objects.filter(client_code__startswith=client_code)
-
-                                if client_query.exists():
-                                    client = client_query.first()
-                                    print(f'Client object retrieved from database: {client.client_code}')
-
-                                    print(f"Comparing values:\n"
-                                          f"Submitted: {first_name}, {last_name}, {phone}, {gender_code}, {marital_status_code}, {insurance_id}\n"
-                                          f"Database: {client.first_name}, {client.last_name}, {client.phone}, {client.gender}, {client.marital_status}, {client.insurance.id}")
-
-                                    if (client.first_name == first_name and
-                                            client.last_name == last_name and
-                                            client.phone == phone and
-                                            client.gender == gender_code and
-                                            client.marital_status == marital_status_code and
-                                            str(client.insurance.id) == insurance_id):
-                                        print('Prediction matches')
-                                        prediction_success = True
-                                        messages.success(request, 'Prediction matched successfully.')
-                                        break
-
-                # Save the Prediction object regardless of validation outcome
-                prediction = Prediction(
-                    first_name=first_name,
-                    last_name=last_name,
-                    phone=phone,
-                    gender=gender_code,
-                    marital_status=marital_status_code,
-                    insurance_id=insurance_id,
-                    address=address,
-                    picture=filename,
-                    available=prediction_success
-                )
-                prediction.save()
-
-                if not prediction_success:
-                    print('No matching picture')
-                    messages.error(request, 'No matching picture found')
-                    return redirect('predictions')
-
-                return redirect('predictions')
-
-            else:
-                print("No image data received.")
-                messages.error(request, 'No image data received')
-                # Save the Prediction object with available set to False
+            if submitted_image is None:
                 prediction = Prediction(
                     first_name=first_name,
                     last_name=last_name,
@@ -315,13 +289,97 @@ def save_prediction(request):
                     available=False
                 )
                 prediction.save()
-                return redirect('predictions')
+                return Response({'error': 'Submitted image could not be read.'}, status=status.HTTP_400_BAD_REQUEST)
 
-        except Exception as e:
-            print("Error during image processing:", e)
-            print(traceback.format_exc())  # Print the stack trace for debugging
-            messages.error(request, 'Error during image processing')
-            # Save the Prediction object with available set to False
+            if not is_high_quality(submitted_image):
+                prediction = Prediction(
+                    first_name=first_name,
+                    last_name=last_name,
+                    phone=phone,
+                    gender=gender_code,
+                    marital_status=marital_status_code,
+                    insurance_id=insurance_id,
+                    address=address,
+                    available=False
+                )
+                prediction.save()
+                return Response({'error': 'Image quality is too low. Please submit a higher quality image.'}, status=status.HTTP_400_BAD_REQUEST)
+
+            face_locations = face_recognition.face_locations(submitted_image)
+            if not face_locations:
+                prediction = Prediction(
+                    first_name=first_name,
+                    last_name=last_name,
+                    phone=phone,
+                    gender=gender_code,
+                    marital_status=marital_status_code,
+                    insurance_id=insurance_id,
+                    address=address,
+                    available=False
+                )
+                prediction.save()
+                return Response({'error': 'No faces detected in the image. Please submit a picture containing a face.'}, status=status.HTTP_400_BAD_REQUEST)
+
+            phone_suffix = phone[-3:]
+            last_name_prefix = last_name[:2].upper()
+            random_suffix = ''.join(random.choices(string.ascii_uppercase + string.digits, k=3))
+            client_code = f"{phone_suffix}{last_name_prefix}{random_suffix}"
+            picture_name = f"{client_code}.jpg"
+
+            retrieved_pictures_folder = os.path.join(BASE_DIR, 'templates', 'static', 'retrieved_pictures')
+            if not os.path.exists(retrieved_pictures_folder):
+                os.makedirs(retrieved_pictures_folder)
+            picture_path = os.path.join(retrieved_pictures_folder, picture_name)
+
+            fs = FileSystemStorage(location=retrieved_pictures_folder)
+            filename = fs.save(picture_name, ContentFile(picture_bytes))
+
+            prediction_success = False
+            submitted_pictures = retrieve_submitted_pictures()
+
+            for submitted_picture_path in submitted_pictures:
+                if submitted_picture_path.endswith('.jpg'):
+                    stored_image_path = os.path.join(BASE_DIR, 'templates', 'static', 'submitted_pictures', submitted_picture_path)
+                    stored_image_contents = cv2.imread(stored_image_path)
+
+                    if stored_image_contents is not None:
+                        is_similar = compare_images_content(submitted_image, [stored_image_contents])
+
+                        if is_similar:
+                            client_code = submitted_picture_path[:5]
+                            client_query = Client.objects.filter(client_code__startswith=client_code)
+
+                            if client_query.exists():
+                                client = client_query.first()
+
+                                if (client.first_name == first_name and
+                                        client.last_name == last_name and
+                                        client.phone == phone and
+                                        client.gender == gender_code and
+                                        client.marital_status == marital_status_code and
+                                        str(client.insurance.id) == insurance_id):
+                                    prediction_success = True
+                                    break
+
+            prediction = Prediction(
+                first_name=first_name,
+                last_name=last_name,
+                phone=phone,
+                gender=gender_code,
+                marital_status=marital_status_code,
+                insurance_id=insurance_id,
+                address=address,
+                picture=filename,
+                available=prediction_success
+            )
+            prediction.save()
+
+            if not prediction_success:
+                return Response({'error': 'No matching picture found'}, status=status.HTTP_400_BAD_REQUEST)
+
+            return Response({'message': 'Prediction matched successfully.'}, status=status.HTTP_201_CREATED)
+
+        else:
             prediction = Prediction(
                 first_name=first_name,
                 last_name=last_name,
@@ -333,12 +391,21 @@ def save_prediction(request):
                 available=False
             )
             prediction.save()
-            return redirect('predictions')
+            return Response({'error': 'No image data received.'}, status=status.HTTP_400_BAD_REQUEST)
 
-    else:
-        print("Failed to submit information")
-        messages.error(request, 'Failed to submit information')
-        return redirect('predictions')
+    except Exception as e:
+        prediction = Prediction(
+            first_name=first_name,
+            last_name=last_name,
+            phone=phone,
+            gender=gender_code,
+            marital_status=marital_status_code,
+            insurance_id=insurance_id,
+            address=address,
+            available=False
+        )
+        prediction.save()
+        return Response({'error': f'Error during image processing: {e}'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
 
@@ -348,45 +415,39 @@ from rest_framework import status
 from .serializers import PredictionSerializer
 from django.db.models import Q
 
-@api_view(['GET'])
+
+
+
+
+from django.http import JsonResponse
+from django.db.models import Q
+from .models import Prediction
+
 def search_predictions(request):
-    query_params = request.query_params
+    search_query = request.GET.get('search', '')
+    predictions = Prediction.objects.filter(
+        Q(first_name__icontains=search_query) |
+        Q(last_name__icontains=search_query) |
+        Q(phone__icontains=search_query) |
+        Q(insurance__name__icontains=search_query) |
+        Q(available__icontains=search_query) |
+        Q(created_date__icontains=search_query)
+    )
+    predictions_data = [
+        {
+            'id': prediction.id,
+            'first_name': prediction.first_name,
+            'last_name': prediction.last_name,
+            'phone': prediction.phone,
+            'insurance': prediction.insurance.name,
+            'available': prediction.available,
+            'created_date': prediction.created_date.strftime('%Y-%m-%d %H:%M:%S')
+        }
+        for prediction in predictions
+    ]
+    return JsonResponse(predictions_data, safe=False)
 
-    first_name = query_params.get('firstname', None)
-    last_name = query_params.get('lastname', None)
-    gender = query_params.get('gender', None)
-    marital_status = query_params.get('marital_status', None)
-    insurance_id = query_params.get('insurance', None)
-    address = query_params.get('address', None)
-    date_from = query_params.get('created_date', None)
-    date_to = query_params.get('date_to', None)
-    available = query_params.get('availability', None)
 
-    filters = Q()
-    if first_name:
-        filters &= Q(first_name__icontains=first_name)
-    if last_name:
-        filters &= Q(last_name__icontains=last_name)
-    if gender:
-        filters &= Q(gender=gender)
-    if marital_status:
-        filters &= Q(marital_status=marital_status)
-    if insurance_id:
-        filters &= Q(insurance_id=insurance_id)
-    if address:
-        filters &= Q(address__icontains=address)
-    if date_from and date_to:
-        filters &= Q(created_date__range=[date_from, date_to])
-    elif date_from:
-        filters &= Q(created_date__gte=date_from)
-    elif date_to:
-        filters &= Q(created_date__lte=date_to)
-    if available is not None:
-        filters &= Q(available=(available.lower() == 'true'))
-
-    predictions = Prediction.objects.filter(filters)
-    serializer = PredictionSerializer(predictions, many=True)
-    return Response(serializer.data, status=status.HTTP_200_OK)
 
 
 
@@ -413,7 +474,6 @@ def delete_prediction(request, prediction_id):
     except Exception as e:
         # If any other error occurs, return an error response
         return JsonResponse({'error': str(e)}, status=500)
-
 
 
 
@@ -519,39 +579,6 @@ def download_predictions_excel(request):
 
 
 
-from django.http import JsonResponse
-from django.db.models import Count
-from .models import Prediction
-
-def institution_predictions(request):
-    # Query predictions, grouping them by insurance and counting the number of available predictions
-    institution_data = Prediction.objects.values('insurance__name', 'available').annotate(prediction_count=Count('id'))
-
-    # Initialize dictionaries to store the count of predictions for each institution
-    institution_counts = {}
-
-    # Iterate through the query results and populate the dictionaries
-    for data in institution_data:
-        insurance_name = data['insurance__name']
-        available = data['available']
-        prediction_count = data['prediction_count']
-
-        # Initialize the dictionary if the institution is encountered for the first time
-        if insurance_name not in institution_counts:
-            institution_counts[insurance_name] = {'True': 0, 'False': 0}
-
-        # Update the count based on the 'available' field
-        if available:
-            institution_counts[insurance_name]['True'] = prediction_count
-        else:
-            institution_counts[insurance_name]['False'] = prediction_count
-
-    return JsonResponse(institution_counts)
-
-
-
-
-
 
 from django.http import JsonResponse
 from .models import Prediction
@@ -616,3 +643,60 @@ def increase_of_predictions_last_5_years(request):
 
     return JsonResponse({'yearly_increase_last_5_years': yearly_increase_last_5_years})
 
+
+
+
+
+from django.http import JsonResponse
+from django.db.models import Count
+from .models import Prediction
+import datetime
+
+def predictions_in_2024(request):
+    # Get the current year
+    current_year = datetime.datetime.now().year
+
+    # Filter predictions for the year 2024
+    predictions_2024 = Prediction.objects.filter(created_date__year=2024)
+
+    # Group predictions by month and count them
+    predictions_by_month = predictions_2024.annotate(month=Count('created_date__month')).values('month')
+
+    # Prepare data for JSON response
+    data = {}
+    for prediction in predictions_by_month:
+        month = prediction['month']
+        data[month] = prediction['month']
+
+    return JsonResponse(data)
+
+
+
+
+from django.views.generic import ListView
+from django.db.models import Q
+from .models import Prediction
+
+class PredictionListView(ListView):
+    model = Prediction
+    template_name = 'prediction/managePredictions.html'
+    context_object_name = 'predictions'
+    paginate_by = 5
+
+    def get_queryset(self):
+        search_query = self.request.GET.get('search', '')
+        if search_query:
+            return Prediction.objects.filter(
+                Q(first_name__icontains=search_query) |
+                Q(last_name__icontains=search_query) |
+                Q(phone__icontains=search_query) |
+                Q(insurance__name__icontains=search_query) |
+                Q(available__icontains=search_query) |
+                Q(created_date__icontains=search_query)
+            )
+        return Prediction.objects.all()
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context['search_query'] = self.request.GET.get('search', '')
+        return context

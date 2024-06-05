@@ -1,77 +1,146 @@
 from django.http import JsonResponse, HttpResponse
+from django.shortcuts import redirect, render
 from django.views.decorators.csrf import csrf_exempt
 from .models import Insurance
 import json
 import pandas as pd
+from django.contrib import messages
 
-# Display insurances
+from django.core.paginator import Paginator
+from django.shortcuts import render
+from .models import Insurance
+from django.db.models import Q
+
+from rest_framework.decorators import api_view
+from rest_framework.response import Response
+from rest_framework import status
+from django.db.models import Q
+from .models import Insurance
+from .serializers import InsuranceSerializer
+from django.core.paginator import Paginator
+
+@api_view(['GET'])
 def display_insurances(request):
-    insurances = list(Insurance.objects.all().values('id', 'insurance_code', 'name', 'created_date'))
-    return JsonResponse({'insurances': insurances})
+    try:
+        search_query = request.GET.get('q', '')
+        insurances = Insurance.objects.filter(
+            Q(insurance_code__icontains=search_query) | 
+            Q(name__icontains=search_query)
+        )
 
-# Get create insurance page
-@csrf_exempt
+        paginator = Paginator(insurances, 5)
+        page_number = request.GET.get('page', 1)
+        page_obj = paginator.get_page(page_number)
+        
+        serializer = InsuranceSerializer(page_obj, many=True)
+
+        return Response({
+            'insurances': serializer.data,
+            'page': page_obj.number,
+            'num_pages': paginator.num_pages,
+            'has_next': page_obj.has_next(),
+            'has_previous': page_obj.has_previous(),
+        }, status=status.HTTP_200_OK)
+    except Exception as e:
+        return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+
+from rest_framework.decorators import api_view
+from rest_framework.response import Response
+from rest_framework import status
+
+@api_view(['GET'])
 def get_create_insurance_page(request):
-    return JsonResponse({'message': 'Create new insurance page'})
+    return Response({'message': 'Insurance creation page'}, status=status.HTTP_200_OK)
 
-# Save insurance
-@csrf_exempt
+
+from rest_framework.decorators import api_view
+from rest_framework.response import Response
+from rest_framework import status
+from .models import Insurance
+from .serializers import InsuranceSerializer
+
+@api_view(['POST'])
 def save_insurance(request):
-    if request.method == 'POST':
-        try:
-            data = json.loads(request.body)
-            code = data.get('code')
-            name = data.get('name')
+    try:
+        data = request.data
+        code = data.get('code')
+        name = data.get('name')
 
-            if not code or not name:
-                return JsonResponse({'error': 'code and name are required'}, status=400)
+        if not code or not name:
+            return Response({'error': 'All fields are required'}, status=status.HTTP_400_BAD_REQUEST)
 
-            # Check if the insurance code or name already exists
-            if Insurance.objects.filter(insurance_code=code).exists():
-                return JsonResponse({'error': 'Insurance with this code already exists'}, status=400)
+        if Insurance.objects.filter(insurance_code=code).exists():
+            return Response({'error': 'Insurance with this code already exists'}, status=status.HTTP_400_BAD_REQUEST)
 
-            if Insurance.objects.filter(name=name).exists():
-                return JsonResponse({'error': 'Insurance with this name already exists'}, status=400)
+        if Insurance.objects.filter(name=name).exists():
+            return Response({'error': 'Insurance with this name already exists'}, status=status.HTTP_400_BAD_REQUEST)
 
-            new_insurance = Insurance.objects.create(insurance_code=code, name=name)
-            return JsonResponse({'message': 'Insurance created successfully'})
-        except json.JSONDecodeError:
-            return JsonResponse({'error': 'Invalid JSON'}, status=400)
-    else:
-        return JsonResponse({'error': 'POST method required'}, status=405)  
-    
-# Edit insurance
+        new_insurance = Insurance.objects.create(insurance_code=code, name=name)
+        serializer = InsuranceSerializer(new_insurance)
+        return Response({'message': 'Insurance saved successfully', 'insurance': serializer.data}, status=status.HTTP_201_CREATED)
+    except Exception as e:
+        return Response({'error': f'Failed to save insurance: {e}'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+   
+from rest_framework.decorators import api_view
+from rest_framework.response import Response
+from rest_framework import status
+from .models import Insurance
+from .serializers import InsuranceSerializer
+
+@api_view(['GET'])
 def edit_insurance(request, insurance_id):
-    insurance = Insurance.objects.filter(id=insurance_id).values('id', 'insurance_code', 'name').first()
-    if insurance:
-        return JsonResponse({'insurance': insurance})
-    else:
-        return JsonResponse({'error': 'Insurance not found'}, status=404)
-
-# Update insurance
-@csrf_exempt
-def update(request, insurance_id):
-    insurance = Insurance.objects.filter(id=insurance_id).first()
-    if insurance:
-        if request.method == 'POST':
-            insurance.insurance_code = request.POST.get('code')
-            insurance.name = request.POST.get('name')
-            insurance.save()
-            return JsonResponse({'message': 'Insurance updated successfully'})
+    try:
+        insurance = Insurance.objects.filter(id=insurance_id).values('id', 'insurance_code', 'name').first()
+        if insurance:
+            serializer = InsuranceSerializer(insurance)
+            return Response({'insurance': serializer.data}, status=status.HTTP_200_OK)
         else:
-            return JsonResponse({'error': 'POST method required'})
-    else:
-        return JsonResponse({'error': 'Insurance not found'}, status=404)
+            return Response({'error': 'Insurance not found'}, status=status.HTTP_404_NOT_FOUND)
+    except Exception as e:
+        return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
-# Delete insurance
-@csrf_exempt
+from rest_framework.decorators import api_view
+from rest_framework.response import Response
+from rest_framework import status
+from .models import Insurance
+from .serializers import InsuranceSerializer
+
+@api_view(['PUT'])
+def update(request, insurance_id):
+    try:
+        insurance = Insurance.objects.filter(id=insurance_id).first()
+        if insurance:
+            data = request.data
+            insurance.insurance_code = data.get('code')
+            insurance.name = data.get('name')
+            insurance.save()
+            serializer = InsuranceSerializer(insurance)
+            return Response({'message': 'Insurance updated successfully', 'insurance': serializer.data}, status=status.HTTP_200_OK)
+        else:
+            return Response({'error': 'Insurance not found'}, status=status.HTTP_404_NOT_FOUND)
+    except Exception as e:
+        return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+from rest_framework.decorators import api_view
+from rest_framework.response import Response
+from rest_framework import status
+from .models import Insurance
+
+@api_view(['DELETE'])
 def delete_insurance(request, insurance_id):
-    insurance = Insurance.objects.filter(id=insurance_id).first()
-    if insurance:
-        insurance.delete()
-        return JsonResponse({'message': 'Insurance deleted successfully'})
-    else:
-        return JsonResponse({'error': 'Insurance not found'}, status=404)
+    try:
+        insurance = Insurance.objects.filter(id=insurance_id).first()
+        if insurance:
+            insurance.delete()
+            return Response({'message': 'Insurance deleted successfully'}, status=status.HTTP_204_NO_CONTENT)
+        else:
+            return Response({'error': 'Insurance not found'}, status=status.HTTP_404_NOT_FOUND)
+    except Exception as e:
+        return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 # Search insurance by code or name
 def search_insurance(request):
@@ -137,10 +206,17 @@ import pandas as pd
 from django.http import HttpResponse
 from .models import Insurance
 
+from django.http import HttpResponse
+from .models import Insurance
+import pandas as pd
+
 def download_insurance_excel(request):
     # Fetch insurance data
     insurances = Insurance.objects.all()
-    data = [[insurance.insurance_code, insurance.name, insurance.created_date] for insurance in insurances]
+    data = [
+        [insurance.insurance_code, insurance.name, insurance.created_date.replace(tzinfo=None)] 
+        for insurance in insurances
+    ]
     df = pd.DataFrame(data, columns=['Code', 'Name', 'Created Date'])
 
     # Create an HttpResponse object with the appropriate Excel content type
@@ -152,7 +228,6 @@ def download_insurance_excel(request):
         df.to_excel(writer, index=False, sheet_name='Insurances')
 
     return response
-
 
 
 from django.http import JsonResponse

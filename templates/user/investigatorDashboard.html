@@ -1,10 +1,229 @@
+{% load static %}
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <title>Title</title>
+   <meta charset="UTF-8">
+   <meta name="viewport" content="width=device-width, initial-scale=1.0">
+   <title>Investigator</title>
+   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.4/css/all.min.css">
+   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 </head>
 <body>
+   <!-- Navbar -->
+   <nav class="navbar navbar-expand-lg navbar-light bg-light">
+       <div class="container-fluid">
+           <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav" aria-controls="navbarNav" aria-expanded="false" aria-label="Toggle navigation">
+               <span class="navbar-toggler-icon"></span>
+           </button>
+           <div class="collapse navbar-collapse" id="navbarNav">
+               <ul class="navbar-nav ms-auto">
+                   <li class="nav-item dropdown">
+                       <a class="nav-link dropdown-toggle" href="#" id="navbarDropdown" role="button" data-bs-toggle="dropdown" aria-expanded="false">
+                           {{ username }}
+                       </a>
+                       <ul class="dropdown-menu dropdown-menu-end" aria-labelledby="navbarDropdown">
+                           <li><a class="dropdown-item" href="#">Update Profile</a></li>
+                           <li><hr class="dropdown-divider"></li>
+                           <li><a class="dropdown-item" href="{% url 'logout' %}">Logout</a></li>
+                       </ul>
+                   </li>
+               </ul>
+           </div>
+       </div>
+   </nav>
+   <!-- End Navbar -->
 
+   <!-- Main Content -->
+   <div class="main-content container mt-5">
+       <h1 class="text-center mb-5 py-5">Insurance Frauds</h1>
+
+       <!-- Histogram -->
+       <div class="mb-5">
+           <canvas id="predictionsHistogram"></canvas>
+       </div>
+
+       <div class="d-flex justify-content-end px-5 mx-5 mb-3">
+           <form class="d-flex" method="get" action="{% url 'doctor_dashboard' %}">
+               <input type="text" name="search" class="form-control" value="{{ search_query }}" placeholder="Search predictions">
+               <button class="btn btn-outline-secondary" type="submit">Search</button>
+           </form>
+       </div>
+
+       <!-- Table of Insurances -->
+       <div class="table-container">
+           <table class="table table-striped" id="tbl">
+               <!-- Table headers -->
+               <thead>
+                   <tr>
+                       <th>ID</th>
+                       <th>Firstname</th>
+                       <th>Lastname</th>
+                       <th>Phone</th>
+                       <th>Insurance</th>
+                       <th>Status</th>
+                       <th>Created Date</th>
+                       <th>Action</th>
+                   </tr>
+               </thead>
+               <!-- Table body -->
+               <tbody>
+                   {% for prediction in predictions %}
+                   <tr>
+                       <td>{{ prediction.id }}</td>
+                       <td>{{ prediction.first_name }}</td>
+                       <td>{{ prediction.last_name }}</td>
+                       <td>{{ prediction.phone }}</td>
+                       <td>{{ prediction.insurance.name }}</td>
+                       <td>{{ prediction.available }}</td>
+                       <td>{{ prediction.created_date }}</td>
+                       <td>
+                           <a href="#" class="btn btn-primary btn-sm explore-link" data-id="{{ prediction.id }}" data-firstname="{{ prediction.first_name }}" data-lastname="{{ prediction.last_name }}" data-phone="{{ prediction.phone }}" data-insurance="{{ prediction.insurance.name }}" data-status="{{ prediction.available }}" data-date="{{ prediction.created_date }}">Explore</a>
+                       </td>
+                   </tr>
+                   {% endfor %}
+               </tbody>
+           </table>
+           <br />
+           <!-- Pagination controls -->
+           <div class="pagination-container text-center px-5 mx-5">
+               <nav aria-label="Page navigation">
+                   <ul class="pagination justify-content-center">
+                       {% if predictions.has_previous %}
+                       <li class="page-item">
+                           <a class="page-link" href="?page=1&search={{ search_query }}" aria-label="First">
+                               <span aria-hidden="true">&laquo;&laquo;</span>
+                           </a>
+                       </li>
+                       <li class="page-item">
+                           <a class="page-link" href="?page={{ predictions.previous_page_number }}&search={{ search_query }}" aria-label="Previous">
+                               <span aria-hidden="true">&laquo;</span>
+                           </a>
+                       </li>
+                       {% endif %}
+                       {% for num in predictions.paginator.page_range %}
+                           {% if predictions.number == num %}
+                               <li class="page-item active"><span class="page-link">{{ num }}</span></li>
+                           {% elif num > predictions.number|add:'-3' and num < predictions.number|add:'3' %}
+                               <li class="page-item"><a class="page-link" href="?page={{ num }}&search={{ search_query }}">{{ num }}</a></li>
+                           {% endif %}
+                       {% endfor %}
+                       {% if predictions.has_next %}
+                      
+                       <li class="page-item">
+                        <a class="page-link" href="?page={{ predictions.next_page_number }}&search={{ search_query }}" aria-label="Next">
+                            <span aria-hidden="true">&raquo;</span>
+                        </a>
+                    </li>
+                    <li class="page-item">
+                        <a class="page-link" href="?page={{ predictions.paginator.num_pages }}&search={{ search_query }}" aria-label="Last">
+                            <span aria-hidden="true">&raquo;&raquo;</span>
+                        </a>
+                    </li>
+                    {% endif %}
+                </ul>
+            </nav>
+        </div>
+    </div>
+</div>
+<!-- End Main Content -->
+
+<!-- Explore Modal -->
+<div class="modal fade" id="exploreModal" tabindex="-1" aria-labelledby="exploreModalLabel" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="exploreModalLabel">Prediction Details</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <form id="exploreForm">
+                    <div class="mb-3">
+                        <label for="exploreFirstName" class="form-label">First Name</label>
+                        <input type="text" class="form-control" id="exploreFirstName" readonly>
+                    </div>
+                    <div class="mb-3">
+                        <label for="exploreLastName" class="form-label">Last Name</label>
+                        <input type="text" class="form-control" id="exploreLastName" readonly>
+                    </div>
+                    <div class="mb-3">
+                        <label for="explorePhone" class="form-label">Phone</label>
+                        <input type="text" class="form-control" id="explorePhone" readonly>
+                    </div>
+                    <div class="mb-3">
+                        <label for="exploreInsurance" class="form-label">Insurance</label>
+                        <input type="text" class="form-control" id="exploreInsurance" readonly>
+                    </div>
+                    <div class="mb-3">
+                        <label for="exploreStatus" class="form-label">Status</label>
+                        <input type="text" class="form-control" id="exploreStatus" readonly>
+                    </div>
+                    <div class="mb-3">
+                        <label for="exploreDate" class="form-label">Created Date</label>
+                        <input type="text" class="form-control" id="exploreDate" readonly>
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Scripts -->
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script>
+    document.addEventListener('DOMContentLoaded', function() {
+        // Prepare data for the histogram
+        const dates = JSON.parse('{{ dates|escapejs }}');
+        const counts = JSON.parse('{{ counts|escapejs }}');
+
+        // Create the histogram
+        const ctx = document.getElementById('predictionsHistogram').getContext('2d');
+        const predictionsHistogram = new Chart(ctx, {
+            type: 'bar',
+            data: {
+                labels: dates,
+                datasets: [{
+                    label: 'Number of Predictions',
+                    data: counts,
+                    backgroundColor: 'rgba(75, 192, 192, 0.2)',
+                    borderColor: 'rgba(75, 192, 192, 1)',
+                    borderWidth: 1
+                }]
+            },
+            options: {
+                scales: {
+                    y: {
+                        beginAtZero: true
+                    }
+                }
+            }
+        });
+
+        // Handle explore link click
+        document.querySelectorAll('.explore-link').forEach(link => {
+            link.addEventListener('click', function() {
+                const firstName = this.getAttribute('data-firstname');
+                const lastName = this.getAttribute('data-lastname');
+                const phone = this.getAttribute('data-phone');
+                const insurance = this.getAttribute('data-insurance');
+                const status = this.getAttribute('data-status');
+                const date = this.getAttribute('data-date');
+
+                document.getElementById('exploreFirstName').value = firstName;
+                document.getElementById('exploreLastName').value = lastName;
+                document.getElementById('explorePhone').value = phone;
+                document.getElementById('exploreInsurance').value = insurance;
+                document.getElementById('exploreStatus').value = status;
+                document.getElementById('exploreDate').value = date;
+
+                new bootstrap.Modal(document.getElementById('exploreModal')).show();
+            });
+        });
+    });
+</script>
 </body>
 </html>

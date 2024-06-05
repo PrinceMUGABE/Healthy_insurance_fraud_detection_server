@@ -14,18 +14,45 @@ from django.core import serializers
 import json
 
 
+def get_manage_clients_page(request):
+    return render(request, 'client/manageClientsDashboard.html')
 
-# Display clients as RESTful response
+
+
+
+from django.core.paginator import Paginator
+
+from django.core.paginator import Paginator
+from django.http import JsonResponse
+from .models import Client
+
 def display_clients(request):
     clients = Client.objects.all()
-    serialized_clients = serializers.serialize('json', clients)
-    return JsonResponse({'clients': json.loads(serialized_clients)})
+    paginator = Paginator(clients, 5)
+
+    page_number = request.GET.get('page')
+    page_obj = paginator.get_page(page_number)
+
+    clients_data = list(page_obj.object_list.values())
+    return JsonResponse({
+        'clients': clients_data,
+        'page': page_obj.number,
+        'num_pages': paginator.num_pages,
+        'has_next': page_obj.has_next(),
+        'has_previous': page_obj.has_previous(),
+    })
 
 
-# Create a new client page
+
+
+from django.http import JsonResponse
+from .models import Insurance
+
 def get_create_client_page(request):
     insurances = Insurance.objects.all()
-    return JsonResponse({'insurances': list(insurances.values())})
+    insurances_data = list(insurances.values())
+    return JsonResponse({'insurances': insurances_data})
+
 
 
 from django.core.files.storage import FileSystemStorage
@@ -54,44 +81,49 @@ def is_high_quality(image):
     min_resolution = (200, 200)  # Minimum resolution for a high-quality image
     return width >= min_resolution[0] and height >= min_resolution[1]
 
+from django.views.decorators.csrf import csrf_exempt
+from django.http import JsonResponse
+import base64
+import cv2
+import numpy as np
+import random
+import string
+import os
+import traceback
+from .models import Client
+from django.core.files.base import ContentFile
+from django.core.files.storage import FileSystemStorage
+
+@csrf_exempt
 def save_insurance_member(request):
     if request.method == 'POST':
         try:
-            # Extract form data
-            first_name = request.POST.get('firstname')
-            last_name = request.POST.get('lastname')
-            phone = request.POST.get('phone')
-            gender = request.POST.get('gender')
-            marital_status = request.POST.get('marital_status')
-            insurance_id = request.POST.get('insurance')
-            address = request.POST.get('address')
-            picture_data = request.POST.get('picture')
+            data = request.POST
+            first_name = data.get('firstname')
+            last_name = data.get('lastname')
+            phone = data.get('phone')
+            gender = data.get('gender')
+            marital_status = data.get('marital_status')
+            insurance_id = data.get('insurance')
+            address = data.get('address')
+            picture_data = data.get('picture')
 
             if picture_data:
-                # Convert base64 image data to bytes
                 picture_bytes = base64.b64decode(picture_data.split(',')[1])
-
-                # Read the submitted image
                 submitted_image = cv2.imdecode(np.frombuffer(picture_bytes, np.uint8), cv2.IMREAD_COLOR)
 
-                # Check if the image has high enough quality
                 if not is_high_quality(submitted_image):
-                    messages.error(request, 'Image quality is too low. Please submit a higher quality image')
-                    return redirect('create_client')
+                    return JsonResponse({'error': 'Image quality is too low. Please submit a higher quality image'}, status=400)
 
-                # Detect faces in the image using face_recognition library
                 face_locations = face_recognition.face_locations(submitted_image)
                 if not face_locations:
-                    messages.error(request, 'No faces detected in the image. Please submit a picture containing a face.')
-                    return redirect('create_client')
+                    return JsonResponse({'error': 'No faces detected in the image. Please submit a picture containing a face.'}, status=400)
 
-                # Generate client code
                 phone_suffix = phone[-3:]
                 last_name_prefix = last_name[:2].upper()
                 random_suffix = ''.join(random.choices(string.ascii_uppercase + string.digits, k=3))
                 client_code = f"{phone_suffix}{last_name_prefix}{random_suffix}"
 
-                # Save the picture contents into the database
                 client = Client.objects.create(
                     client_code=client_code,
                     first_name=first_name,
@@ -101,34 +133,24 @@ def save_insurance_member(request):
                     insurance_id=insurance_id,
                     marital_status=marital_status,
                     address=address,
-                    picture=picture_bytes  # Save the picture contents directly
+                    picture=picture_bytes
                 )
 
-                # Save the picture to the specified folder with client_code as filename
                 picture_name = f"{client_code}.jpg"
-                picture_path = os.path.join('submitted_pictures', picture_name)
-
-                # Save the picture using FileSystemStorage
                 fs = FileSystemStorage(location=os.path.join(BASE_DIR, 'templates', 'static', 'submitted_pictures'))
                 filename = fs.save(picture_name, ContentFile(picture_bytes))
 
-                # Get the URL of the saved picture (optional if needed)
-                picture_url = fs.url(filename)
-
-                messages.success(request, 'Client saved successfully')
-                return JsonResponse({'message': 'Client saved successfully'})
+                return JsonResponse({'message': 'Client saved successfully'}, status=201)
             else:
-                print("No image data received.")
-                
-                return JsonResponse({'Error': 'No image received'})
+                return JsonResponse({'error': 'No image data received.'}, status=400)
         except Exception as e:
             print("Error during image processing:", e)
-            print(traceback.format_exc())  # Print the stack trace for debugging
-            
-            return JsonResponse({'Error': 'Error during image processing: {e}'})
+            print(traceback.format_exc())
+            return JsonResponse({'error': 'Error during image processing'}, status=500)
     else:
-        messages.error(request, 'Failed to submit Information')
-        return JsonResponse({'Error': 'failed to submit information'})
+        return JsonResponse({'error': 'Failed to submit Information'}, status=400)
+
+
 
 
 def extract_face_encodings(image):
@@ -184,155 +206,83 @@ def delete_client(request, client_id):
     return JsonResponse({'message': 'Client Deleted successfully'})
 
 
+from django.http import JsonResponse
+from django.shortcuts import get_object_or_404
+from .models import Client, Insurance
+
 def edit_client(request, client_id):
     client = get_object_or_404(Client, pk=client_id)
     insurances = Insurance.objects.all()
-    #return render(request, 'client/edit_client.html', {'client': client, 'insurances': insurances})
-    return JsonResponse({'insurances': list(insurances.values()), 'client':client})
+    insurances_data = list(insurances.values())
+    client_data = {
+        'id': client.id,
+        'client_code': client.client_code,
+        'first_name': client.first_name,
+        'last_name': client.last_name,
+        'phone': client.phone,
+        'gender': client.gender,
+        'marital_status': client.marital_status,
+        'insurance_id': client.insurance,
+        'address': client.address,
+        'picture': client.picture,
+    }
+    return JsonResponse({'client': client_data, 'insurances': insurances_data})
 
 
-from django.shortcuts import get_object_or_404, redirect
-from django.core.files.base import ContentFile
-from django.core.files.storage import FileSystemStorage
-from django.contrib import messages
+from django.views.decorators.csrf import csrf_exempt
+from django.http import JsonResponse
+from django.shortcuts import get_object_or_404
 import base64
-import os
-import traceback
 import cv2
 import numpy as np
+import os
+import traceback
+from .models import Client
+from django.core.files.base import ContentFile
+from django.core.files.storage import FileSystemStorage
 
+@csrf_exempt
 def update(request, client_id):
     client = get_object_or_404(Client, pk=client_id)
     if request.method == 'POST':
         try:
-            # Extract form data
-            client.client_code = request.POST.get('code')
-            client.first_name = request.POST.get('firstname')
-            client.last_name = request.POST.get('lastname')
-            client.phone = request.POST.get('phone')
-            client.gender = request.POST.get('gender')
-            client.marital_status = request.POST.get('marital_status')
-            client.insurance_id = request.POST.get('insurance')
-            client.address = request.POST.get('address')
-            picture_data = request.POST.get('picture')
+            data = request.POST
+            client.client_code = data.get('code')
+            client.first_name = data.get('firstname')
+            client.last_name = data.get('lastname')
+            client.phone = data.get('phone')
+            client.gender = data.get('gender')
+            client.marital_status = data.get('marital_status')
+            client.insurance_id = data.get('insurance')
+            client.address = data.get('address')
+            picture_data = data.get('picture')
 
             if picture_data:
-                # Convert base64 image data to bytes
                 picture_bytes = base64.b64decode(picture_data.split(',')[1])
-
-                # Read the submitted image
                 submitted_image = cv2.imdecode(np.frombuffer(picture_bytes, np.uint8), cv2.IMREAD_COLOR)
 
-                # Check if the image has high enough quality
                 if not is_high_quality(submitted_image):
-                    print('Image quality is too low. Please submit a higher quality image')
-                    messages.error(request, 'Image quality is too low. Please submit a higher quality image')
-                    #return redirect('edit_client', client_id=client_id)
-                    return JsonResponse({'error': 'Image quality is too low. Please submit a higher quality image'},client_id=client_id)
+                    return JsonResponse({'error': 'Image quality is too low. Please submit a higher quality image'}, status=400)
 
-                # Save the new picture contents into the database
                 client.picture = picture_bytes
 
-                # Save the picture to the specified folder with client_code as filename
                 picture_name = f"{client.client_code}.jpg"
                 picture_path = os.path.join(BASE_DIR, 'templates', 'static', 'submitted_pictures', picture_name)
 
-                # Check if the file already exists and delete it if it does
                 if os.path.exists(picture_path):
                     os.remove(picture_path)
 
-                # Save the picture using FileSystemStorage
                 fs = FileSystemStorage(location=os.path.join(BASE_DIR, 'templates', 'static', 'submitted_pictures'))
                 filename = fs.save(picture_name, ContentFile(picture_bytes))
 
-                # Get the URL of the saved picture (optional if needed)
-                picture_url = fs.url(filename)
-
-            # Save the updated client object
             client.save()
-            print('Client updated successfully')
-            messages.success(request, 'Client updated successfully')
-            return JsonResponse({'message': 'Client updated successfully'})
+            return JsonResponse({'message': 'Client updated successfully'}, status=200)
         except Exception as e:
             print("Error during image processing:", e)
-            print(traceback.format_exc())  # Print the stack trace for debugging
-            messages.error(request, f'Error during image processing: {e}')
-            #return redirect('edit_client', client_id=client_id)
-            return JsonResponse({'error': 'Error during image processing'},client_id=client_id)
+            print(traceback.format_exc())
+            return JsonResponse({'error': f'Error during image processing: {e}'}, status=500)
     else:
-        # Handle GET request if needed
-        # You might want to render a form template here
-        pass
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
+        return JsonResponse({'error': 'Invalid request method'}, status=400)
 
 
 

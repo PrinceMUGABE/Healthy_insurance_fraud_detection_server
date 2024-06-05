@@ -8,6 +8,7 @@ class User(models.Model):
         ('doctor', 'Doctor'),
         ('admin', 'Admin'),
         ('investigator', 'Investigator'),
+        ('employee', 'Employee'),
     )
 
     # Custom validator for username field

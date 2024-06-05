@@ -1,0 +1,76 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sign In</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.1.3/css/bootstrap.min.css">
+    <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
+    <link rel="stylesheet" type="text/css" href="{% static 'css/user/login.css' %}">
+    <link rel="stylesheet" type="text/css" href="{% static 'css/user/index.css' %}">
+</head>
+<body>
+
+    <!-- Navbar -->
+    <nav class="navbar navbar-expand-lg py-3 fixed-top">
+        <div class="container-fluid">
+            <a class="navbar-brand text-white" href="#">Health Insurance Fraud Detection</a>
+            <button class="navbar-toggler text-white" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav" aria-controls="navbarNav" aria-expanded="false" aria-label="Toggle navigation">
+                <span class="navbar-toggler-icon text-white bg-white"></span>
+            </button>
+            <div class="collapse navbar-collapse" id="navbarNav">
+                <ul class="navbar-nav ms-auto">
+                    <li class="nav-item">
+                        <a class="nav-link" href="{% url 'index' %}" id="home-navbar">Home</a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="#">Contact</a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="#">About</a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="{% url 'login' %}" id="">Sign In</a>
+                    </li>
+                </ul>
+            </div>
+        </div>
+    </nav>
+
+
+    <div class="signin-container d-flex flex-column flex-md-row align-items-center py-5 px-5">
+        <div class="signin-image mb-4 mb-md-0 me-md-4">
+            <img src="{% static 'img/logo.png' %}" alt="Logo" class="img-fluid">
+        </div>
+        <div class="signin-box card p-4 border border-2 border-primary rounded-3">
+            <h2 class="text-center mb-4">Sign In</h2>
+            <form id="signin-form" method="post" action="{% url 'signin' %}">
+                {% csrf_token %}
+                <div class="mb-3">
+                    <label for="username" class="form-label">Username</label>
+                    <input type="text" class="form-control" id="username" name="username" required>
+                </div>
+                <div class="mb-3">
+                    <label for="password" class="form-label">Password</label>
+                    <input type="password" class="form-control" id="password" name="password" required>
+                </div>
+                <button type="submit" class="btn btn-primary w-100">Sign In</button>
+            </form>
+        </div>
+    </div>
+
+
+    <!-- Footer -->
+    <footer class="footer py-5">
+        <div class="container">
+            <p class="text-white">&copy; 2024 Health Insurance Fraud Detection. All rights reserved.</p>
+        </div>
+    </footer>
+
+    <script src="{% static 'js/user/login.js' %}"></script>
+    <!-- Scripts -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.1.3/js/bootstrap.bundle.min.js"></script>
+    <script src="{% static 'js/user/index.js' %}"></script>
+</body>
+</html>
