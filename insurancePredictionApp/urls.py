@@ -7,7 +7,6 @@ from .views import increase_of_predictions_2024, increase_of_predictions_last_5_
 
 urlpatterns = [
     path('predictions/', views.display_predictions, name='predictions'),
-    path('create_prediction/', views.get_create_prediction_page, name='create_prediction'),
     path('save_prediction/', views.save_prediction, name='save_prediction'),  
     path('search_predictions/', search_predictions, name='search_predictions'),
     path('delete/<int:prediction_id>/', delete_prediction, name='delete_prediction'),

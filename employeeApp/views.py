@@ -3,8 +3,8 @@ from .models import Employee
 from insuranceApp.models import Insurance
 import random
 import string
-
-
+from rest_framework.permissions import IsAuthenticated, IsAdminUser, AllowAny
+from rest_framework.decorators import api_view, permission_classes
 from django.core.paginator import Paginator
 from django.shortcuts import render
 from .models import Employee
@@ -16,6 +16,19 @@ from django.db.models import Q
 import datetime
 from collections import Counter
 
+from django.shortcuts import render
+from django.core.paginator import Paginator
+from django.db.models import Q
+from collections import Counter
+from .models import Employee
+from datetime import datetime
+
+from django.core import serializers
+from django.http import JsonResponse
+from django.db.models import Q
+from collections import Counter
+from .models import Employee
+
 def display_employees(request):
     query = request.GET.get('q')
     if query:
@@ -23,25 +36,15 @@ def display_employees(request):
             Q(employee_code__icontains=query) |
             Q(email__icontains=query) |
             Q(insurance__name__icontains=query)
-        )
+        ).select_related('insurance')  # Ensure insurance data is fetched in the query
     else:
-        employee_list = Employee.objects.all()
+        employee_list = Employee.objects.all().select_related('insurance')
 
-    paginator = Paginator(employee_list, 5)  # Show 5 employees per page
-    page_number = request.GET.get('page')
-    page_obj = paginator.get_page(page_number)
+    # Serialize queryset
+    serialized_data = serializers.serialize('json', employee_list, use_natural_foreign_keys=True)
 
-    # Prepare histogram data
-    employees_by_date = Employee.objects.values_list('created_date', flat=True)
-    date_counts = Counter(date.strftime("%Y-%m-%d") for date in employees_by_date)
-    labels = list(date_counts.keys())
-    data = list(date_counts.values())
+    return JsonResponse({'employees': serialized_data})
 
-    return render(request, 'employee/manageEmployees.html', {
-        'page_obj': page_obj,
-        'labels': labels,
-        'data': data,
-    })
 
 
 
@@ -72,11 +75,12 @@ from django.contrib.auth.hashers import make_password
 from django.core.mail import send_mail
 
 @api_view(['POST'])
+# @permission_classes([IsAdminUser])
 def save_employee(request):
     try:
         data = request.data
-        first_name = data.get('firstname')
-        last_name = data.get('lastname')
+        first_name = data.get('first_name')
+        last_name = data.get('last_name')
         email = data.get('email')
         phone = data.get('phone')
         address = data.get('address')
@@ -148,34 +152,44 @@ from insuranceApp.models import Insurance
 from django.shortcuts import get_object_or_404
 
 @api_view(['GET'])
-def edit_employee(request, employee_id):
+def get_employee(request, id):
     try:
-        employee = get_object_or_404(Employee, id=employee_id)
-        insurances = Insurance.objects.all().values('id', 'insurance_code', 'name')
+        employee = Employee.objects.get(pk=id)
+        insurances = Insurance.objects.all()
+        
         employee_data = {
-            'id': employee.id,
-            'employee_code': employee.employee_code,
-            'first_name': employee.first_name,
-            'last_name': employee.last_name,
-            'email': employee.email,
-            'phone': employee.phone,
-            'address': employee.address,
-            'insurance': employee.insurance.id if employee.insurance else None
+            "id": employee.pk,
+            "employee_code": employee.employee_code,
+            "first_name": employee.first_name,
+            "last_name": employee.last_name,
+            "email": employee.email,
+            "phone": employee.phone,
+            "address": employee.address,
+            "insurance": employee.insurance.pk if employee.insurance else None
         }
-        insurances_list = list(insurances)
-        return Response({'employee': employee_data, 'insurances': insurances_list}, status=status.HTTP_200_OK)
-    except Exception as e:
-        return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+        
+       
+        insurances_data = [
+            {
+                "id": insurance.pk,
+                "insurance_code": insurance.insurance_code,
+                "name": insurance.name
+            } for insurance in insurances
+        ]
+        
+        return JsonResponse({"employee": employee_data, "insurances": insurances_data})
+    except Employee.DoesNotExist:
+        return JsonResponse({"error": "Employee not found"}, status=404)
 
 
 @api_view(['PUT'])
+# @permission_classes([IsAdminUser])
 def update_employee(request, employee_id):
     try:
         employee = get_object_or_404(Employee, id=employee_id)
         data = request.data
-        employee.employee_code = data.get('code')
-        employee.first_name = data.get('firstname')
-        employee.last_name = data.get('lastname')
+        employee.first_name = data.get('first_name')
+        employee.last_name = data.get('last_name')
         employee.email = data.get('email')
         employee.phone = data.get('phone')
         employee.address = data.get('address')
@@ -189,7 +203,6 @@ def update_employee(request, employee_id):
         employee.save()
         employee_data = {
             'id': employee.id,
-            'employee_code': employee.employee_code,
             'first_name': employee.first_name,
             'last_name': employee.last_name,
             'email': employee.email,
@@ -207,6 +220,7 @@ def update_employee(request, employee_id):
 
 
 @api_view(['DELETE'])
+# @permission_classes([IsAdminUser])
 def delete_employee(request, employee_id):
     try:
         employee = get_object_or_404(Employee, id=employee_id)

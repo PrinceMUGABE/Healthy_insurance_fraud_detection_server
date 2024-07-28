@@ -1,32 +1,16 @@
 from django.db import models
 from django.utils import timezone
-from django.core.validators import RegexValidator
 from insuranceApp.models import Insurance
 
 class Prediction(models.Model):
-
-    GENDER_CHOICES = [
-        ('M', 'Male'),
-        ('F', 'Female'),
-        ('O', 'Other')
-    ]
-
-    MARITAL_STATUS_CHOICES = [
-        ('S', 'Single'),
-        ('M', 'Married'),
-        ('D', 'Divorced'),
-        ('W', 'Widowed'),
-        ('O', 'Other')
-    ]
-
     first_name = models.CharField(max_length=50)
     last_name = models.CharField(max_length=50)
     phone = models.CharField(max_length=10)
-    gender = models.CharField(max_length=1, choices=GENDER_CHOICES)
-    marital_status = models.CharField(max_length=1, choices=MARITAL_STATUS_CHOICES)
+    gender = models.CharField(max_length=6)
+    marital_status = models.CharField(max_length=15)
     insurance = models.ForeignKey(Insurance, on_delete=models.CASCADE)
     address = models.CharField(max_length=255)
-    picture = models.ImageField(upload_to='predictions', null=True, blank=True)
+    picture = models.BinaryField(null=True, blank=True)
     available = models.BooleanField(default=False)
     created_date = models.DateTimeField(default=timezone.now)
 

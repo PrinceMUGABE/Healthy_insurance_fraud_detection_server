@@ -1,3 +1,4 @@
+import logging
 from django.conf import settings
 from django.contrib import messages
 from .models import Prediction
@@ -33,20 +34,72 @@ from .serializers import PredictionSerializer
 from django.db.models import Q
 from insuranceApp.serializers import InsuranceSerializer
 
-
+from rest_framework.decorators import api_view
+from rest_framework.response import Response
+from rest_framework import status
+import base64
+import cv2
+import numpy as np
+import random
+import string
 import os
+import traceback
+from .models import Prediction
+from patientApp.models import Client
 
-model_folder = os.path.join(settings.BASE_DIR, 'templates', 'static', 'models')
+from django.core.files.base import ContentFile
+from django.core.files.storage import FileSystemStorage
+from patientApp.models import Client
+from patientApp.serializers import ClientSerializer
 
-
-
-
+from rest_framework.decorators import api_view
+from rest_framework.response import Response
+from rest_framework import status
+from patientApp.serializers import ClientSerializer
+from patientApp.models import Client
+import base64
+import base64
+import numpy as np
+import torch
+from PIL import Image
+from io import BytesIO
+from facenet_pytorch import InceptionResnetV1, MTCNN
+from django.shortcuts import get_object_or_404
+from rest_framework import status
+from rest_framework.decorators import api_view
+from rest_framework.response import Response
+from rest_framework.response import Response
+from rest_framework import status
+import os
+# Initialize TF-IDF vectorizer
+tfidf_vectorizer = TfidfVectorizer()
+from django.core.paginator import Paginator, EmptyPage, PageNotAnInteger
+from django.core.paginator import Paginator, PageNotAnInteger, EmptyPage
+from django.db.models import Q
+from django.shortcuts import render
+from .models import Prediction
+from rest_framework.decorators import api_view
+from rest_framework.response import Response
+from django.db.models import Q
+from .models import Prediction
+from .serializers import PredictionSerializer
+from django.core.paginator import Paginator
 # View to return total available predictions
 from django.http import JsonResponse
 from .models import Prediction
-
 from django.http import JsonResponse
 from .models import Prediction
+# View to return institution predictions by status
+from django.http import JsonResponse
+from django.db.models import Count
+from .models import Prediction
+from django.http import JsonResponse
+from django.db.models import Count
+from .models import Prediction
+
+
+model_folder = os.path.join(settings.BASE_DIR, 'templates', 'static', 'models')
+
 
 def total_available_predictions(request):
     total_available = Prediction.objects.all().count()
@@ -55,16 +108,6 @@ def total_available_predictions(request):
     return JsonResponse({'total_available_predictions': total_available, 'total_frauded': total_frauded, 'total_valid': total_valid})
 
 
-
-
-# View to return institution predictions by status
-from django.http import JsonResponse
-from django.db.models import Count
-from .models import Prediction
-
-from django.http import JsonResponse
-from django.db.models import Count
-from .models import Prediction
 
 def institution_predictions(request):
     institution_data = Prediction.objects.values('insurance__name', 'available').annotate(prediction_count=Count('id'))
@@ -87,324 +130,234 @@ def institution_predictions(request):
 
 
 
-
-
-# Initialize TF-IDF vectorizer
-tfidf_vectorizer = TfidfVectorizer()
-
-from django.core.paginator import Paginator, EmptyPage, PageNotAnInteger
-
-from django.core.paginator import Paginator, PageNotAnInteger, EmptyPage
-from django.db.models import Q
-from django.shortcuts import render
-from .models import Prediction
-
-from rest_framework.decorators import api_view
-from rest_framework.response import Response
-from django.db.models import Q
-from .models import Prediction
-from .serializers import PredictionSerializer
-from django.core.paginator import Paginator
-
 @api_view(['GET'])
 def display_predictions(request):
-    search_query = request.GET.get('search', '')
-
-    if search_query:
-        all_predictions = Prediction.objects.filter(
-            Q(first_name__icontains=search_query) |
-            Q(last_name__icontains=search_query) |
-            Q(phone__icontains=search_query) |
-            Q(insurance__name__icontains=search_query) |
-            Q(available__icontains=search_query) |
-            Q(created_date__icontains=search_query)
-        )
-    else:
-        all_predictions = Prediction.objects.all()
-
-    predictions_per_page = 5
-    paginator = Paginator(all_predictions, predictions_per_page)
-    page_number = request.GET.get('page', 1)
-
-    try:
-        predictions_page = paginator.page(page_number)
-    except PageNotAnInteger:
-        predictions_page = paginator.page(1)
-    except EmptyPage:
-        predictions_page = paginator.page(paginator.num_pages)
-
-    serializer = PredictionSerializer(predictions_page, many=True)
-
+    all_predictions = Prediction.objects.all().select_related('insurance')
+    serializer = PredictionSerializer(all_predictions, many=True)
     return Response({
-        'predictions': serializer.data,
-        'page': predictions_page.number,
-        'num_pages': paginator.num_pages,
-        'has_next': predictions_page.has_next(),
-        'has_previous': predictions_page.has_previous(),
+        'predictions': serializer.data
     }, status=status.HTTP_200_OK)
-
-
-from rest_framework.decorators import api_view
-from rest_framework.response import Response
-from .models import Insurance
-from insuranceApp.serializers import InsuranceSerializer
-
-@api_view(['GET'])
-def get_create_prediction_page(request):
-    insurances = Insurance.objects.all()
-    serializer = InsuranceSerializer(insurances, many=True)
-    return Response({'insurances': serializer.data}, status=status.HTTP_200_OK)
-
-
 
 
 
 import base64
-import os
-import random
-import string
-import traceback
 import cv2
-import face_recognition
+import logging
 import numpy as np
-from django.shortcuts import redirect
-from django.core.files.base import ContentFile
-from django.core.files.storage import FileSystemStorage
-from django.contrib import messages
-from patientApp.models import Client  # Import your Client model
-from .models import Prediction
+import face_recognition
+from rest_framework import status
+from rest_framework.decorators import api_view
+from rest_framework.response import Response
+from django.http import JsonResponse
+from patientApp.models import Client
+from patientApp.serializers import ClientSerializer
+from insuranceApp.models import Insurance
 
-# Assuming BASE_DIR is defined somewhere in your settings
-BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+# Pre-trained face detector
+face_detector = cv2.CascadeClassifier(cv2.data.haarcascades + 'haarcascade_frontalface_default.xml')
 
 def is_high_quality(image):
     height, width = image.shape[:2]
     min_resolution = (200, 200)  # Minimum resolution for a high-quality image
     return width >= min_resolution[0] and height >= min_resolution[1]
 
-def retrieve_submitted_pictures():
-    submitted_pictures_folder = os.path.join(BASE_DIR, 'templates', 'static', 'submitted_pictures')
-    picture_files = [filename for filename in os.listdir(submitted_pictures_folder) if filename.endswith('.jpg')]
-    return picture_files
+def get_image_from_base64(picture_data):
+    try:
+        # Remove the "data:image/jpeg;base64," part if it exists
+        if ',' in picture_data:
+            picture_data = picture_data.split(',', 1)[1]
+        picture_bytes = base64.b64decode(picture_data)
+        submitted_image = cv2.imdecode(np.frombuffer(picture_bytes, np.uint8), cv2.IMREAD_COLOR)
 
-def compare_images_content(submitted_picture, existing_pictures):
-    # Convert submitted picture to RGB
-    submitted_picture_rgb = cv2.cvtColor(submitted_picture, cv2.COLOR_BGR2RGB)
+        if submitted_image is None:
+            message = 'Image data is not valid.'
+            logging.error(message)
+            return JsonResponse({'error': message}, status=400)
 
-    # Encode faces in the submitted picture
-    submitted_encodings = face_recognition.face_encodings(submitted_picture_rgb)
+        if not is_high_quality(submitted_image):
+            message = 'Image quality is too low. Please submit a higher quality image.'
+            logging.error(message)
+            return JsonResponse({'error': message}, status=400)
 
-    if not submitted_encodings:
-        print("No faces found in the submitted picture.")
-        return False
+        # Face detection using Haar Cascade Classifier
+        faces = face_detector.detectMultiScale(submitted_image, scaleFactor=1.1, minNeighbors=5, minSize=(30, 30))
 
-    # Load face encodings for existing pictures
-    existing_encodings = []
-    for existing_picture in existing_pictures:
-        # Check if the existing picture has high enough quality
-        if not is_high_quality(existing_picture):
-            print(f"Skipping low-quality existing picture: {existing_picture}")
-            continue
+        if len(faces) == 0:
+            message = 'No faces detected in the image. Please submit a picture with a face.'
+            logging.error(message)
+            return JsonResponse({'error': message}, status=400)
+        elif len(faces) > 1:
+            message = 'Multiple faces detected. Please submit a picture with only one person.'
+            logging.error(message)
+            return JsonResponse({'error': message}, status=400)
 
+        return submitted_image
+
+    except Exception as e:
+        logging.error(f"Failed to decode base64 image: {e}")
+        return JsonResponse({'error': 'Failed to decode base64 image'}, status=400)
+
+def compare_images_content(submitted_picture, existing_picture):
+    try:
+        # Convert submitted picture to RGB
+        submitted_picture_rgb = cv2.cvtColor(submitted_picture, cv2.COLOR_BGR2RGB)
+
+        # Detect faces in the submitted picture
+        submitted_face_locations = face_recognition.face_locations(submitted_picture_rgb)
+        if not submitted_face_locations:
+            logging.error("No faces found in the submitted picture.")
+            return 0.0
+
+        # Encode faces in the submitted picture
+        submitted_encodings = face_recognition.face_encodings(submitted_picture_rgb, submitted_face_locations)
+        if not submitted_encodings:
+            logging.error("Failed to encode faces in the submitted picture.")
+            return 0.0
+
+        # Convert existing picture to RGB
         existing_picture_rgb = cv2.cvtColor(existing_picture, cv2.COLOR_BGR2RGB)
-        existing_encoding = face_recognition.face_encodings(existing_picture_rgb)
+        existing_face_locations = face_recognition.face_locations(existing_picture_rgb)
+        if not existing_face_locations:
+            logging.error("No faces found in existing picture.")
+            return 0.0
 
-        if existing_encoding:
-            existing_encodings.append(existing_encoding[0])
-        else:
-            print(f"No faces found in existing picture: {existing_picture}")
+        # Encode faces in the existing picture
+        existing_encodings = face_recognition.face_encodings(existing_picture_rgb, existing_face_locations)
+        if not existing_encodings:
+            logging.error("Failed to encode faces in existing picture.")
+            return 0.0
 
-    if not existing_encodings:
-        print("No faces found in any high-quality existing pictures.")
-        return False
+        # Compare face encodings
+        for existing_encoding in existing_encodings:
+            results = face_recognition.compare_faces(submitted_encodings, existing_encoding)
+            if True in results:
+                return 1.0  # High similarity
 
-    # Compare face encodings
-    for encoding in existing_encodings:
-        results = face_recognition.compare_faces(submitted_encodings, encoding)
-        if True in results:
-            return True
+        return 0.0  # Low similarity
 
-    return False
-
-
-from rest_framework.decorators import api_view
-from rest_framework.response import Response
-from rest_framework import status
-import base64
-import cv2
-import numpy as np
-import random
-import string
-import os
-import traceback
-from .models import Prediction
-from patientApp.models import Client
-
-from django.core.files.base import ContentFile
-from django.core.files.storage import FileSystemStorage
+    except Exception as e:
+        logging.error(f"Error comparing images: {e}")
+        return 0.0
 
 @api_view(['POST'])
 def save_prediction(request):
     try:
         data = request.data
-        first_name = data.get('firstname')
-        last_name = data.get('lastname')
+        first_name = data.get('first_name')
+        last_name = data.get('last_name')
         phone = data.get('phone')
         gender = data.get('gender')
         marital_status = data.get('marital_status')
-        insurance_id = data.get('insurance')
+        insurance_code = data.get('insurance')
         address = data.get('address')
         picture_data = data.get('picture')
 
-        gender_map = {
-            'Male': 'M',
-            'Female': 'F',
-            'Other': 'O'
-        }
-
-        marital_status_map = {
-            'Single': 'S',
-            'Married': 'M',
-            'Divorced': 'D',
-            'Widowed': 'W',
-            'Other': 'O'
-        }
-
-        gender_code = gender_map.get(gender)
-        marital_status_code = marital_status_map.get(marital_status)
-
-        if picture_data:
-            picture_bytes = base64.b64decode(picture_data.split(',')[1])
+        # Fetch the client based on the phone number
+        insurance = Insurance.objects.get(insurance_code=insurance_code)
+        clients = Client.objects.filter(phone=phone)
+        if not clients.exists():
+            data = Client.objects.filter(first_name=first_name, last_name=last_name, address=address, insurance=insurance)
+          
+            # Remove the "data:image/jpeg;base64," part if it exists
+            if ',' in picture_data:
+                picture_data = picture_data.split(',', 1)[1]
+            picture_bytes = base64.b64decode(picture_data)
             submitted_image = cv2.imdecode(np.frombuffer(picture_bytes, np.uint8), cv2.IMREAD_COLOR)
 
-            if submitted_image is None:
-                prediction = Prediction(
-                    first_name=first_name,
-                    last_name=last_name,
-                    phone=phone,
-                    gender=gender_code,
-                    marital_status=marital_status_code,
-                    insurance_id=insurance_id,
-                    address=address,
-                    available=False
-                )
-                prediction.save()
-                return Response({'error': 'Submitted image could not be read.'}, status=status.HTTP_400_BAD_REQUEST)
-
-            if not is_high_quality(submitted_image):
-                prediction = Prediction(
-                    first_name=first_name,
-                    last_name=last_name,
-                    phone=phone,
-                    gender=gender_code,
-                    marital_status=marital_status_code,
-                    insurance_id=insurance_id,
-                    address=address,
-                    available=False
-                )
-                prediction.save()
-                return Response({'error': 'Image quality is too low. Please submit a higher quality image.'}, status=status.HTTP_400_BAD_REQUEST)
-
-            face_locations = face_recognition.face_locations(submitted_image)
-            if not face_locations:
-                prediction = Prediction(
-                    first_name=first_name,
-                    last_name=last_name,
-                    phone=phone,
-                    gender=gender_code,
-                    marital_status=marital_status_code,
-                    insurance_id=insurance_id,
-                    address=address,
-                    available=False
-                )
-                prediction.save()
-                return Response({'error': 'No faces detected in the image. Please submit a picture containing a face.'}, status=status.HTTP_400_BAD_REQUEST)
-
-            phone_suffix = phone[-3:]
-            last_name_prefix = last_name[:2].upper()
-            random_suffix = ''.join(random.choices(string.ascii_uppercase + string.digits, k=3))
-            client_code = f"{phone_suffix}{last_name_prefix}{random_suffix}"
-            picture_name = f"{client_code}.jpg"
-
-            retrieved_pictures_folder = os.path.join(BASE_DIR, 'templates', 'static', 'retrieved_pictures')
-            if not os.path.exists(retrieved_pictures_folder):
-                os.makedirs(retrieved_pictures_folder)
-            picture_path = os.path.join(retrieved_pictures_folder, picture_name)
-
-            fs = FileSystemStorage(location=retrieved_pictures_folder)
-            filename = fs.save(picture_name, ContentFile(picture_bytes))
-
-            prediction_success = False
-            submitted_pictures = retrieve_submitted_pictures()
-
-            for submitted_picture_path in submitted_pictures:
-                if submitted_picture_path.endswith('.jpg'):
-                    stored_image_path = os.path.join(BASE_DIR, 'templates', 'static', 'submitted_pictures', submitted_picture_path)
-                    stored_image_contents = cv2.imread(stored_image_path)
-
-                    if stored_image_contents is not None:
-                        is_similar = compare_images_content(submitted_image, [stored_image_contents])
-
-                        if is_similar:
-                            client_code = submitted_picture_path[:5]
-                            client_query = Client.objects.filter(client_code__startswith=client_code)
-
-                            if client_query.exists():
-                                client = client_query.first()
-
-                                if (client.first_name == first_name and
-                                        client.last_name == last_name and
-                                        client.phone == phone and
-                                        client.gender == gender_code and
-                                        client.marital_status == marital_status_code and
-                                        str(client.insurance.id) == insurance_id):
-                                    prediction_success = True
-                                    break
+            submitted_image = get_image_from_base64(picture_data)
+            if isinstance(submitted_image, JsonResponse):
+                return submitted_image  # Return error response from get_image_from_base64
 
             prediction = Prediction(
                 first_name=first_name,
                 last_name=last_name,
                 phone=phone,
-                gender=gender_code,
-                marital_status=marital_status_code,
-                insurance_id=insurance_id,
+                gender=gender,
+                marital_status=marital_status,
+                insurance=insurance,
                 address=address,
-                picture=filename,
-                available=prediction_success
-            )
-            prediction.save()
-
-            if not prediction_success:
-                return Response({'error': 'No matching picture found'}, status=status.HTTP_400_BAD_REQUEST)
-
-            return Response({'message': 'Prediction matched successfully.'}, status=status.HTTP_201_CREATED)
-
-        else:
-            prediction = Prediction(
-                first_name=first_name,
-                last_name=last_name,
-                phone=phone,
-                gender=gender_code,
-                marital_status=marital_status_code,
-                insurance_id=insurance_id,
-                address=address,
+                picture=client.picture,
                 available=False
             )
             prediction.save()
-            return Response({'error': 'No image data received.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        client = clients.first()
+
+        # Serialize the client data
+        serialized_client = ClientSerializer(client).data
+
+        # Compare the submitted data with the existing client data
+        comparison_results = {
+            'first_name': first_name == client.first_name or first_name == client.last_name,
+            'last_name': last_name == client.last_name or last_name == client.first_name,
+            'phone': phone == client.phone,
+            'gender': gender == client.gender,
+            'marital_status': marital_status == client.marital_status,
+            'insurance': insurance_code == client.insurance.insurance_code if client.insurance else False,
+            'address': address.lower() == client.address.lower() if client.address else False,
+        }
+
+        # Convert submitted picture to a readable format
+        submitted_picture = get_image_from_base64(picture_data)
+        if isinstance(submitted_picture, JsonResponse):
+            return submitted_picture  # Return error response from get_image_from_base64
+
+        # Convert stored picture to a readable format
+        stored_picture = cv2.imdecode(np.frombuffer(client.picture, np.uint8), cv2.IMREAD_COLOR)
+        if stored_picture is None:
+            logging.error("Failed to decode stored picture.")
+            return Response({'error': 'Failed to decode stored picture'}, status=status.HTTP_400_BAD_REQUEST)
+
+        # Compare picture contents
+        picture_match = compare_images_content(submitted_picture, stored_picture)
+        comparison_results['picture'] = picture_match
+
+        # Separate matched and mismatched data
+        matched_data = {k: v for k, v in comparison_results.items() if v}
+        mismatched_data = {k: v for k, v in comparison_results.items() if not v}
+
+        # Determine availability
+        available = all(comparison_results.values())
+        
+        if available:
+            # Save the prediction data to the database
+            prediction = Prediction(
+                first_name=first_name,
+                last_name=last_name,
+                phone=phone,
+                gender=gender,
+                marital_status=marital_status,
+                insurance=client.insurance,  # Use the existing insurance object
+                address=address,
+                picture=client.picture,
+                available=True
+            )
+            prediction.save()
+        else:
+            # Save the prediction data to the database
+            prediction = Prediction(
+                first_name=first_name,
+                last_name=last_name,
+                phone=phone,
+                gender=gender,
+                marital_status=marital_status,
+                insurance=client.insurance,  # Use the existing insurance object
+                address=address,
+                picture=client.picture,
+                available=False
+            )
+            prediction.save()
+
+        return Response({
+            'matched_data': matched_data,
+            'mismatched_data': mismatched_data,
+            'serialized_client': serialized_client,
+        }, status=status.HTTP_200_OK)
+
+        
 
     except Exception as e:
-        prediction = Prediction(
-            first_name=first_name,
-            last_name=last_name,
-            phone=phone,
-            gender=gender_code,
-            marital_status=marital_status_code,
-            insurance_id=insurance_id,
-            address=address,
-            available=False
-        )
-        prediction.save()
+        logging.error(f"Error during image processing: {e}")
         return Response({'error': f'Error during image processing: {e}'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 

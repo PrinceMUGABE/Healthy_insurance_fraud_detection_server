@@ -1,5 +1,4 @@
 import traceback
-
 import numpy as np
 from django.contrib import messages
 from django.shortcuts import render, redirect, get_object_or_404
@@ -12,49 +11,6 @@ import joblib
 from django.http import JsonResponse
 from django.core import serializers
 import json
-
-
-def get_manage_clients_page(request):
-    return render(request, 'client/manageClientsDashboard.html')
-
-
-
-
-from django.core.paginator import Paginator
-
-from django.core.paginator import Paginator
-from django.http import JsonResponse
-from .models import Client
-
-def display_clients(request):
-    clients = Client.objects.all()
-    paginator = Paginator(clients, 5)
-
-    page_number = request.GET.get('page')
-    page_obj = paginator.get_page(page_number)
-
-    clients_data = list(page_obj.object_list.values())
-    return JsonResponse({
-        'clients': clients_data,
-        'page': page_obj.number,
-        'num_pages': paginator.num_pages,
-        'has_next': page_obj.has_next(),
-        'has_previous': page_obj.has_previous(),
-    })
-
-
-
-
-from django.http import JsonResponse
-from .models import Insurance
-
-def get_create_client_page(request):
-    insurances = Insurance.objects.all()
-    insurances_data = list(insurances.values())
-    return JsonResponse({'insurances': insurances_data})
-
-
-
 from django.core.files.storage import FileSystemStorage
 from django.conf import settings
 import os
@@ -73,14 +29,6 @@ from .models import Client  # Import your Client model
 import numpy as np
 import cv2
 import face_recognition
-
-BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-
-def is_high_quality(image):
-    height, width = image.shape[:2]
-    min_resolution = (200, 200)  # Minimum resolution for a high-quality image
-    return width >= min_resolution[0] and height >= min_resolution[1]
-
 from django.views.decorators.csrf import csrf_exempt
 from django.http import JsonResponse
 import base64
@@ -93,63 +41,202 @@ import traceback
 from .models import Client
 from django.core.files.base import ContentFile
 from django.core.files.storage import FileSystemStorage
+from django.http import JsonResponse, HttpResponse
+from django.shortcuts import redirect, render
+from django.views.decorators.csrf import csrf_exempt
+from .models import Insurance
+import json
+import pandas as pd
+from django.contrib import messages
+
+from django.core.paginator import Paginator
+from django.shortcuts import render
+from .models import Insurance
+from django.db.models import Q
+
+from rest_framework.decorators import api_view
+from rest_framework.response import Response
+from rest_framework import status
+from django.db.models import Q
+from .models import Insurance
+from django.core.paginator import Paginator
+
+
+from django.shortcuts import get_object_or_404, render
+from django.contrib.auth.hashers import make_password, check_password
+from django.core.mail import send_mail
+from django.conf import settings
+from django.urls import reverse
+from django.utils import timezone
+from django.views.decorators.csrf import csrf_exempt
+from django.contrib.auth import logout, login
+from django.db import IntegrityError
+from rest_framework.decorators import api_view, permission_classes
+from rest_framework.response import Response
+from rest_framework import status
+from django.db.models import Q, Count
+from django.core.paginator import Paginator, EmptyPage, PageNotAnInteger
+from django.http import HttpResponse, JsonResponse
+from reportlab.lib.pagesizes import letter
+from reportlab.pdfgen import canvas
+from io import BytesIO
+import csv
+import json
+from rest_framework.permissions import IsAuthenticated, IsAdminUser, AllowAny
+from django.db.models.functions import ExtractYear
+from datetime import datetime, date, timedelta
+from rest_framework_simplejwt.tokens import RefreshToken
+from insurancePredictionApp.models import Insurance
+from patientApp.models import Client
+from insurancePredictionApp.models import Prediction
+from django.contrib.auth.models import User
+from django.db.models import Q
+from rest_framework.response import Response
+from rest_framework.decorators import api_view
+from rest_framework.pagination import PageNumberPagination
+import base64
+import cv2
+import numpy as np
+from django.http import JsonResponse
+from rest_framework.decorators import api_view
+import traceback
+from django.core.paginator import Paginator
+from django.core.paginator import Paginator
+from django.http import JsonResponse
+from .models import Client
+from django.core.serializers.json import DjangoJSONEncoder
+from django.core.paginator import Paginator
+from django.http import JsonResponse
+from patientApp.models import Client
+
+from django.core.serializers.json import DjangoJSONEncoder
+from django.core.paginator import Paginator
+from django.http import JsonResponse
+from patientApp.models import Client
+import base64
+
+from .serializers import ClientSerializer
+
+@api_view(['GET'])
+def display_clients(request):
+    clients = Client.objects.all().order_by('id')
+    paginator = Paginator(clients, 5)
+    page_number = request.GET.get('page')
+    page_obj = paginator.get_page(page_number)
+
+    serializer = ClientSerializer(page_obj, many=True)
+
+    return Response({
+        'clients': serializer.data,
+        'page': page_obj.number,
+        'num_pages': paginator.num_pages,
+        'has_next': page_obj.has_next(),
+        'has_previous': page_obj.has_previous(),
+    })
+
+
+
+BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+
+def is_high_quality(image):
+    height, width = image.shape[:2]
+    min_resolution = (200, 200)  # Minimum resolution for a high-quality image
+    return width >= min_resolution[0] and height >= min_resolution[1]
+
+
+
+# Pre-trained face detector
+face_detector = cv2.CascadeClassifier(cv2.data.haarcascades + 'haarcascade_frontalface_default.xml')
+
 
 @csrf_exempt
+@api_view(['POST'])
 def save_insurance_member(request):
-    if request.method == 'POST':
-        try:
+    try:
+        if request.content_type == 'application/json':
+            data = request.data
+        else:
             data = request.POST
-            first_name = data.get('firstname')
-            last_name = data.get('lastname')
-            phone = data.get('phone')
-            gender = data.get('gender')
-            marital_status = data.get('marital_status')
-            insurance_id = data.get('insurance')
-            address = data.get('address')
-            picture_data = data.get('picture')
 
-            if picture_data:
-                picture_bytes = base64.b64decode(picture_data.split(',')[1])
-                submitted_image = cv2.imdecode(np.frombuffer(picture_bytes, np.uint8), cv2.IMREAD_COLOR)
+        first_name = data.get('first_name')
+        last_name = data.get('last_name')
+        phone = data.get('phone')
+        gender = data.get('gender')
+        marital_status = data.get('marital_status')
+        insurance_code = data.get('insurance')  # Changed from insurance_id to insurance_code
+        address = data.get('address')
+        picture_data = data.get('picture')
+        
+        print(f'\n\nInsurance submitted: {insurance_code}\n\n')
 
-                if not is_high_quality(submitted_image):
-                    return JsonResponse({'error': 'Image quality is too low. Please submit a higher quality image'}, status=400)
+        if not all([first_name, last_name, phone, gender, marital_status, insurance_code, address, picture_data]):
+            message = 'All fields are required.'
+            print(message)
+            return JsonResponse({'error': message}, status=400)
 
-                face_locations = face_recognition.face_locations(submitted_image)
-                if not face_locations:
-                    return JsonResponse({'error': 'No faces detected in the image. Please submit a picture containing a face.'}, status=400)
+        try:
+            insurance = Insurance.objects.get(insurance_code=insurance_code)
+            print(f'\n\n Insurance found in Insurance App: {insurance}\n\n')
+        except Insurance.DoesNotExist:
+            message = f'Insurance with code {insurance_code} does not exist.'
+            print(message)
+            return JsonResponse({'error': message}, status=400)
 
-                phone_suffix = phone[-3:]
-                last_name_prefix = last_name[:2].upper()
-                random_suffix = ''.join(random.choices(string.ascii_uppercase + string.digits, k=3))
-                client_code = f"{phone_suffix}{last_name_prefix}{random_suffix}"
+        if picture_data:
+            # Remove the "data:image/jpeg;base64," part if it exists
+            if ',' in picture_data:
+                picture_data = picture_data.split(',', 1)[1]
+            picture_bytes = base64.b64decode(picture_data)
+            submitted_image = cv2.imdecode(np.frombuffer(picture_bytes, np.uint8), cv2.IMREAD_COLOR)
 
-                client = Client.objects.create(
-                    client_code=client_code,
-                    first_name=first_name,
-                    last_name=last_name,
-                    phone=phone,
-                    gender=gender,
-                    insurance_id=insurance_id,
-                    marital_status=marital_status,
-                    address=address,
-                    picture=picture_bytes
-                )
+            if not is_high_quality(submitted_image):
+                message = 'Image quality is too low. Please submit a higher quality image.'
+                print(message)
+                return JsonResponse({'error': message}, status=400)
 
-                picture_name = f"{client_code}.jpg"
-                fs = FileSystemStorage(location=os.path.join(BASE_DIR, 'templates', 'static', 'submitted_pictures'))
-                filename = fs.save(picture_name, ContentFile(picture_bytes))
+            # Face detection using Haar Cascade Classifier
+            faces = face_detector.detectMultiScale(submitted_image, scaleFactor=1.1, minNeighbors=5, minSize=(30, 30))
 
-                return JsonResponse({'message': 'Client saved successfully'}, status=201)
-            else:
-                return JsonResponse({'error': 'No image data received.'}, status=400)
-        except Exception as e:
-            print("Error during image processing:", e)
-            print(traceback.format_exc())
-            return JsonResponse({'error': 'Error during image processing'}, status=500)
-    else:
-        return JsonResponse({'error': 'Failed to submit Information'}, status=400)
+            if len(faces) == 0:
+                message = 'No faces detected in the image. Please submit a picture with a face.'
+                print(message)
+                return JsonResponse({'error': message}, status=400)
+            elif len(faces) > 1:
+                message = 'Multiple faces detected. Please submit a picture with only one person.'
+                print(message)
+                return JsonResponse({'error': message}, status=400)
+            
+            # Example logic to generate client code
+            phone_suffix = phone[-3:]
+            last_name_prefix = last_name[:2].upper()
+            random_suffix = ''.join(random.choices(string.ascii_uppercase + string.digits, k=3))
+            client_code = f"{phone_suffix}{last_name_prefix}{random_suffix}"
 
+            # Save client data to database
+            client = Client.objects.create(
+                client_code=client_code,
+                first_name=first_name,
+                last_name=last_name,
+                phone=phone,
+                gender=gender,
+                insurance=insurance,  # Note the correct assignment
+                marital_status=marital_status,
+                address=address,
+                picture=picture_bytes
+            )
+
+            message = 'Client saved successfully'
+            print(message)
+            return JsonResponse({'message': message}, status=201)
+        else:
+            message = 'No image data received.'
+            print(message)
+            return JsonResponse({'error': message}, status=400)
+    except Exception as e:
+        error_message = 'Error during image processing'
+        print(f"{error_message}: {e}")
+        print(traceback.format_exc())
+        return JsonResponse({'error': error_message}, status=500)
 
 
 
@@ -192,28 +279,20 @@ def extract_face_encodings(image):
         print("Error:", e)
         return []
 
-
+@api_view(['DELETE'])
 def delete_client(request, client_id):
     client = get_object_or_404(Client, id=client_id)
     client.delete()
 
-    # Create or update the client dataset after deleting a client
-    create_or_update_client_dataset()
-
-    # Train or update the model
-    # train_or_update_model()
-
-    return JsonResponse({'message': 'Client Deleted successfully'})
+    return JsonResponse({'message': 'Client Deleted successfully'}, status=status.HTTP_200_OK)
 
 
 from django.http import JsonResponse
 from django.shortcuts import get_object_or_404
 from .models import Client, Insurance
 
-def edit_client(request, client_id):
+def get_client(request, client_id):
     client = get_object_or_404(Client, pk=client_id)
-    insurances = Insurance.objects.all()
-    insurances_data = list(insurances.values())
     client_data = {
         'id': client.id,
         'client_code': client.client_code,
@@ -222,11 +301,16 @@ def edit_client(request, client_id):
         'phone': client.phone,
         'gender': client.gender,
         'marital_status': client.marital_status,
-        'insurance_id': client.insurance,
+        'insurance': {
+            'insurance_code': client.insurance.insurance_code,
+            'name': client.insurance.name
+        } if client.insurance else None,
         'address': client.address,
-        'picture': client.picture,
+        'picture': base64.b64encode(client.picture).decode('utf-8') if client.picture else None,
+        'created_date': client.created_date
     }
-    return JsonResponse({'client': client_data, 'insurances': insurances_data})
+    return JsonResponse(client_data)
+
 
 
 from django.views.decorators.csrf import csrf_exempt
@@ -241,271 +325,18 @@ from .models import Client
 from django.core.files.base import ContentFile
 from django.core.files.storage import FileSystemStorage
 
-@csrf_exempt
-def update(request, client_id):
-    client = get_object_or_404(Client, pk=client_id)
-    if request.method == 'POST':
-        try:
-            data = request.POST
-            client.client_code = data.get('code')
-            client.first_name = data.get('firstname')
-            client.last_name = data.get('lastname')
-            client.phone = data.get('phone')
-            client.gender = data.get('gender')
-            client.marital_status = data.get('marital_status')
-            client.insurance_id = data.get('insurance')
-            client.address = data.get('address')
-            picture_data = data.get('picture')
-
-            if picture_data:
-                picture_bytes = base64.b64decode(picture_data.split(',')[1])
-                submitted_image = cv2.imdecode(np.frombuffer(picture_bytes, np.uint8), cv2.IMREAD_COLOR)
-
-                if not is_high_quality(submitted_image):
-                    return JsonResponse({'error': 'Image quality is too low. Please submit a higher quality image'}, status=400)
-
-                client.picture = picture_bytes
-
-                picture_name = f"{client.client_code}.jpg"
-                picture_path = os.path.join(BASE_DIR, 'templates', 'static', 'submitted_pictures', picture_name)
-
-                if os.path.exists(picture_path):
-                    os.remove(picture_path)
-
-                fs = FileSystemStorage(location=os.path.join(BASE_DIR, 'templates', 'static', 'submitted_pictures'))
-                filename = fs.save(picture_name, ContentFile(picture_bytes))
-
-            client.save()
-            return JsonResponse({'message': 'Client updated successfully'}, status=200)
-        except Exception as e:
-            print("Error during image processing:", e)
-            print(traceback.format_exc())
-            return JsonResponse({'error': f'Error during image processing: {e}'}, status=500)
-    else:
-        return JsonResponse({'error': 'Invalid request method'}, status=400)
-
-
-
-
-
-def view_client_details(request, client_id):
-    client = Client.objects.get(pk=client_id)
-    save_client_picture(client_id, client.picture)
-    serialized_client = serializers.serialize('json', [client, ])
-    return JsonResponse({'client': json.loads(serialized_client)})
-
-
-
-
-
-
-def save_client_picture(client_id, picture_data):
-    picture_folder = os.path.join(settings.BASE_DIR, 'templates', 'static', 'retrieved_pictures')
-    picture_path = os.path.join(picture_folder, f"{client_id}.jpg")  # Assuming the pictures are JPEG format
-
-    # Create the directory if it doesn't exist
-    if not os.path.exists(picture_folder):
-        os.makedirs(picture_folder)
-
-        # Decode base64 image data
-    image_data = base64.b64decode(picture_data)
-
-    with open(picture_path, 'wb') as f:
-        f.write(image_data)
-import pickle
-from sklearn.feature_extraction.text import TfidfVectorizer
-
-
-import os
-import pickle
-from sklearn.feature_extraction.text import TfidfVectorizer
-def prepare_dataset(dataset, save_config=True, config_file='preprocessing_config.pkl'):
-    # Drop duplicates and rows with missing values
-    dataset = dataset.drop_duplicates()
-    dataset = dataset.dropna()
-
-    # Initialize TF-IDF vectorizer
-    tfidf_vectorizer = TfidfVectorizer()
-
-    # TF-IDF Vectorization for first name
-    first_name_tfidf = tfidf_vectorizer.fit_transform(dataset['first_name'])
-    first_name_df = pd.DataFrame(first_name_tfidf.toarray(), columns=tfidf_vectorizer.get_feature_names_out())
-
-    # TF-IDF Vectorization for last name
-    last_name_tfidf = tfidf_vectorizer.fit_transform(dataset['last_name'])
-    last_name_df = pd.DataFrame(last_name_tfidf.toarray(), columns=tfidf_vectorizer.get_feature_names_out())
-
-    # TF-IDF Vectorization for address
-    address_tfidf = tfidf_vectorizer.fit_transform(dataset['address'])
-    address_df = pd.DataFrame(address_tfidf.toarray(), columns=tfidf_vectorizer.get_feature_names_out())
-
-    # Combine numerical features
-    X = pd.concat([first_name_df, last_name_df, address_df], axis=1)
-
-    # Encode categorical variables (gender and marital_status)
-    dataset['gender'] = dataset['gender'].map({'male': 0, 'female': 1, 'other': 2})
-    dataset['marital_status'] = dataset['marital_status'].map(
-        {'single': 0, 'married': 1, 'divorced': 2, 'widowed': 3, 'separated': 4})
-
-    # Include insurance_id as a categorical variable
-    X = pd.concat([X, pd.get_dummies(dataset['insurance_id'])], axis=1)
-
-    # Include picture data as a feature (assuming it's already preprocessed as needed)
-    picture_features = dataset['picture'].apply(lambda x: preprocess_picture(x))
-    picture_df = pd.DataFrame(picture_features, columns=['picture_feature'])
-    X = pd.concat([X, picture_df], axis=1)
-
-    # Define target variable (availability) and client code
-    y = dataset['availability']
-    client_code = dataset['client_code']
-
-    # Define the path where preprocessing_config.pkl should be saved
-    config_path = os.path.join('templates', 'static', 'models', config_file)
-
-    print("\n\nNumber of features in X: \n\n", X.shape[1])
-
-    # Save configurations
-    if save_config:
-        config = {
-            'tfidf_vectorizer': tfidf_vectorizer
-            # Add more configurations here if needed
-        }
-        with open(config_path, 'wb') as f:
-            pickle.dump(config, f)
-
-    return X, y, client_code
-
-import cv2
-import numpy as np
-import base64
-
-# Load the pre-trained face detection model
-face_cascade = cv2.CascadeClassifier(cv2.data.haarcascades + 'haarcascade_frontalface_default.xml')
-def preprocess_picture(picture_data):
-    # Debugging: Print the length of the picture data
-    print("Length of picture data:", len(picture_data))
-
-    # Convert the base64 image data to bytes
-    nparr = np.frombuffer(base64.b64decode(picture_data), np.uint8)
-
-    # Debugging: Print the length of the decoded bytes
-    print("Length of decoded bytes:", len(nparr))
-
-    # Decode the image
-    image = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
-
-    # Debugging: Check if the image is empty
-    if image is None:
-        print("Image is empty!")
-        return False  # Return False if the image is empty
-
-    # Convert the image to grayscale
-    gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
-
-    # Detect faces in the image
-    faces = face_cascade.detectMultiScale(gray, scaleFactor=1.1, minNeighbors=5, minSize=(30, 30))
-
-    if len(faces) > 0:
-        # If a face is detected, return True
-        return True
-    else:
-        # If no face is detected, return False
-        return False
-def train_model(X_train, y_train):
-    model = RandomForestClassifier(n_estimators=100, random_state=42)
-    model.fit(X_train, y_train)
-    return model
-def create_or_update_client_dataset():
-    # Retrieve all clients from the database
-    clients = Client.objects.all()
-
-    # If no clients are found, return early
-    if not clients:
-        return
-
-    # Serialize clients data
-    client_data_list = []
-    for client in clients:
-        client_data = {
-            'client_code': client.client_code,
-            'first_name': client.first_name,
-            'last_name': client.last_name,
-            'phone': client.phone,
-            'gender': client.gender,
-            'marital_status': client.marital_status,
-            'insurance_id': client.insurance_id,
-            'address': client.address,
-            'picture': client.picture,
-            'availability': 1  # Default availability value
-        }
-        client_data_list.append(client_data)
-
-    # Convert the data to a DataFrame
-    dataset = pd.DataFrame(client_data_list)
-
-    # Define the folder where the dataset file will be saved
-    dataset_folder = os.path.join(settings.BASE_DIR, 'templates', 'static', 'datasets')
-    os.makedirs(dataset_folder, exist_ok=True)
-
-    # Define the file path for the dataset file
-    dataset_file_path = os.path.join(dataset_folder, 'client_dataset.csv')
-
-    # Save the dataset to a CSV file
-    save_dataset(dataset, 'client_dataset.csv')
-def load_dataset(dataset_file):
-    dataset_folder = os.path.join(settings.BASE_DIR, 'templates', 'static', 'datasets')
-    dataset_file_path = os.path.join(dataset_folder, dataset_file)
-    return pd.read_csv(dataset_file_path)
-def save_dataset(dataset, dataset_file):
-    dataset_folder = os.path.join(settings.BASE_DIR, 'templates', 'static', 'datasets')
-    dataset_file_path = os.path.join(dataset_folder, dataset_file)
-    dataset.to_csv(dataset_file_path, index=False)
-
-def train_or_update_model():
-    # Load dataset
-    dataset_file = 'client_dataset.csv'  # Specify the dataset file name
-    dataset = load_dataset(dataset_file)
-
-    # Prepare dataset for training
-    X, y, client_code = prepare_dataset(dataset)
-
-    # Debugging: Print the shapes of input arrays
-    print("Shape of X:", X.shape)
-    print("Shape of y:", y.shape)
-
-    # If dataset is too small, log a warning and return
-    if len(dataset) < 5:  # Adjust the threshold as needed
-        print("Dataset has too few samples to split. Please collect more data.")
-        return
-
-    # Split dataset into training and testing sets
-    X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
-
-    # Debugging: Print the shapes of training and testing sets
-    print("Shape of X_train:", X_train.shape)
-    print("Shape of X_test:", X_test.shape)
-    print("Shape of y_train:", y_train.shape)
-    print("Shape of y_test:", y_test.shape)
-
-    # Train model
-    model = train_model(X_train, y_train)
-
-    # Evaluate model
-    y_pred = model.predict(X_test)
-    accuracy = accuracy_score(y_test, y_pred)
-    print("Accuracy:", accuracy)
-
-    # Save model
-    model_folder = os.path.join(settings.BASE_DIR, 'templates', 'static', 'models')
-    model_file_path = os.path.join(model_folder, 'trained_model.joblib')
-    joblib.dump(model, model_file_path)
-
-
-
-
-
-
-
+@api_view(['PUT'])
+def update_client(request, client_id):
+    try:
+        client = Client.objects.get(pk=client_id)
+    except Client.DoesNotExist:
+        return Response(status=status.HTTP_404_NOT_FOUND)
+
+    serializer = ClientSerializer(client, data=request.data, partial=True)
+    if serializer.is_valid():
+        serializer.save()
+        return Response(serializer.data)
+    return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
 
 from django.http import JsonResponse, HttpResponse

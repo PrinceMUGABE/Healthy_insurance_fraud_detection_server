@@ -13,6 +13,7 @@ class Insurance(models.Model):
 
     insurance_code = models.CharField(max_length=50, unique=True)
     name = models.CharField(max_length=100)
+    owner = models.CharField(max_length=50, null=False, default='')
     created_date = models.DateTimeField(default=timezone.now)
 
     def __str__(self):

@@ -1,34 +1,63 @@
 from django.db import models
-from django.core.validators import RegexValidator
-from django.contrib.auth.hashers import make_password
+from django.utils import timezone
+from django.contrib.auth.models import AbstractUser
+from django.conf import settings
+from datetime import timedelta
 
-class User(models.Model):
-    # Define choices for user roles
+class User(AbstractUser):
     USER_ROLE_CHOICES = (
-        ('doctor', 'Doctor'),
+        ('user', 'User'),
         ('admin', 'Admin'),
-        ('investigator', 'Investigator'),
         ('employee', 'Employee'),
+        ('doctor', 'Doctor'),
+        ('investigator', "Investigator"),
     )
-
-    # Custom validator for username field
-    username_validator = RegexValidator(
-        regex=r'^[\w.@+-]+$',
-        message='Enter a valid username. This value may contain only letters, numbers, and @/./+/-/_ characters.'
-    )
-
-    username = models.CharField(max_length=100, validators=[username_validator], unique=True)
-    email = models.EmailField(unique=True, max_length=255)
-    password = models.CharField(max_length=100)  # Saving only hashed password
-    role = models.CharField(max_length=30, choices=USER_ROLE_CHOICES, default='user')
+    first_name = models.CharField(max_length=100)
+    last_name = models.CharField(max_length=100)
+    username = models.CharField(unique=True, max_length=100)
+    email = models.EmailField(unique=True)
+    password = models.CharField(max_length=100)
+    phone = models.CharField(max_length=10, unique=True, null=True, blank=True)
+    role = models.CharField(max_length=20, choices=USER_ROLE_CHOICES, default='user')
+    is_active = models.BooleanField(default=True)
+    created_at = models.DateTimeField(default=timezone.now)
     last_login = models.DateTimeField(blank=True, null=True)
-    created_date = models.DateTimeField(auto_now_add=True)  # New field for storing creation date
 
-    # def save(self, *args, **kwargs):
-    #     # Hash the password before saving
-    #     if self.password:
-    #         self.password = make_password(self.password)
-    #     super().save(*args, **kwargs)
+    # Define related_name to avoid clashes with auth.User's groups and user_permissions
+    groups = models.ManyToManyField(
+        'auth.Group',
+        related_name='custom_user_groups',
+        blank=True,
+        verbose_name='groups',
+        help_text='The groups this user belongs to. A user will get all permissions granted to each of their groups.',
+    )
+    
+    user_permissions = models.ManyToManyField(
+        'auth.Permission',
+        related_name='custom_user_permissions',
+        blank=True,
+        verbose_name='user permissions',
+        help_text='Specific permissions for this user.',
+    )
 
     def __str__(self):
-        return f"{self.email} ({self.role})"
+        return self.username
+    
+    class Meta:
+        permissions = (
+            ("can_view_dashboard", "Can view dashboard"),
+            ("can_edit_profile", "Can edit profile"),
+            ("can_add_user", "Can add user"),
+            ("can_view_users", "Can view users"),
+            ("can_delete_user", "Can delete user"),
+            ("can_update_user", "Can update user"),
+            ("can_reset_password", "Can reset password"),
+            ("is_doctor", "Is doctor"),
+            ("is_investigator", "Is investigator"),
+            ("is_admin", "Is admin"),
+            ("is_employee", "Is employee"),
+            ("can_logout", "Can logout"),
+            # add more custom permissions here
+        )
+    
+    

@@ -18,29 +18,17 @@ class Client(models.Model):
         message='Enter a valid phone number.'
     )
 
-    GENDER_CHOICES = [
-        ('M', 'Male'),
-        ('F', 'Female'),
-        ('O', 'Other')
-    ]
 
-    MARITAL_STATUS_CHOICES = [
-        ('S', 'Single'),
-        ('M', 'Married'),
-        ('D', 'Divorced'),
-        ('W', 'Widowed')
-    ]
 
     client_code = models.CharField(max_length=50, unique=True, validators=[client_code_validator])
     first_name = models.CharField(max_length=100)
     last_name = models.CharField(max_length=100)
-    phone = models.CharField(max_length=15, validators=[phone_validator], unique=True)
-    gender = models.CharField(max_length=1, choices=GENDER_CHOICES)
-    marital_status = models.CharField(max_length=1, choices=MARITAL_STATUS_CHOICES)
+    phone = models.CharField(max_length=15, validators=[phone_validator])
+    gender = models.CharField(max_length=10)
+    marital_status = models.CharField(max_length=15)
     insurance = models.ForeignKey(Insurance, on_delete=models.SET_NULL, null=True)
     address = models.CharField(max_length=100)
     picture = models.BinaryField(null=True, blank=True)
-    face_encodings = models.TextField(null=True, blank=True)  # Store face encodings as text
     created_date = models.DateTimeField(default=timezone.now)
 
     def __str__(self):

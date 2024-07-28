@@ -4,8 +4,8 @@ from . import views
 urlpatterns = [
     path('', views.index, name='index'),
     path('create/', views.create_user, name='signup'),
-    path('login/', views.get_login_page, name='login'),
-    path('signin/', views.signin, name='signin'),
+
+    path('login/', views.signin, name='login'),
     path('user/admin_dashboard/', views.admin_dashboard, name='admin_dashboard'),
     path('doctor_dashboard/', views.doctor_dashboard, name='doctor_dashboard'),
     path('employee_dashboard/', views.employee_dashboard, name='employee_dashboard'),
@@ -22,4 +22,6 @@ urlpatterns = [
     
     path('prediction-trends/', views.prediction_trends, name='prediction_trends'),
     path('prediction/available_predictions_today/', views.available_predictions_today, name='available_predictions_today'),
+    path('reset_password/', views.reset_password, name='reset-password'),
+    path('contact/', views.contact_us, name='contact'),
 ]

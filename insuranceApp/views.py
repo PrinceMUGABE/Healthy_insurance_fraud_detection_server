@@ -19,7 +19,48 @@ from .models import Insurance
 from .serializers import InsuranceSerializer
 from django.core.paginator import Paginator
 
+
+from django.shortcuts import get_object_or_404, render
+from django.contrib.auth.hashers import make_password, check_password
+from django.core.mail import send_mail
+from django.conf import settings
+from django.urls import reverse
+from django.utils import timezone
+from django.views.decorators.csrf import csrf_exempt
+from django.contrib.auth import logout, login
+from django.db import IntegrityError
+from rest_framework.decorators import api_view, permission_classes
+from rest_framework.response import Response
+from rest_framework import status
+from django.db.models import Q, Count
+from django.core.paginator import Paginator, EmptyPage, PageNotAnInteger
+from django.http import HttpResponse, JsonResponse
+from reportlab.lib.pagesizes import letter
+from reportlab.pdfgen import canvas
+from io import BytesIO
+import csv
+import json
+from rest_framework.permissions import IsAuthenticated, IsAdminUser, AllowAny
+from django.db.models.functions import ExtractYear
+from datetime import datetime, date, timedelta
+from rest_framework_simplejwt.tokens import RefreshToken
+
+
+
+from insurancePredictionApp.models import Insurance
+from patientApp.models import Client
+from insurancePredictionApp.models import Prediction
+
+
+from django.contrib.auth.models import User
+from django.db.models import Q
+from rest_framework.response import Response
+from rest_framework.decorators import api_view
+from rest_framework.pagination import PageNumberPagination
+
+
 @api_view(['GET'])
+# @permission_classes([IsAuthenticated])
 def display_insurances(request):
     try:
         search_query = request.GET.get('q', '')
@@ -62,13 +103,15 @@ from .models import Insurance
 from .serializers import InsuranceSerializer
 
 @api_view(['POST'])
+# @permission_classes([IsAdminUser])
 def save_insurance(request):
     try:
         data = request.data
         code = data.get('code')
         name = data.get('name')
+        owner = data.get('owner')
 
-        if not code or not name:
+        if not code or not name or not owner:
             return Response({'error': 'All fields are required'}, status=status.HTTP_400_BAD_REQUEST)
 
         if Insurance.objects.filter(insurance_code=code).exists():
@@ -77,13 +120,13 @@ def save_insurance(request):
         if Insurance.objects.filter(name=name).exists():
             return Response({'error': 'Insurance with this name already exists'}, status=status.HTTP_400_BAD_REQUEST)
 
-        new_insurance = Insurance.objects.create(insurance_code=code, name=name)
+        new_insurance = Insurance.objects.create(insurance_code=code, name=name, owner=owner)
         serializer = InsuranceSerializer(new_insurance)
         return Response({'message': 'Insurance saved successfully', 'insurance': serializer.data}, status=status.HTTP_201_CREATED)
     except Exception as e:
         return Response({'error': f'Failed to save insurance: {e}'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
-
-
+   
+   
    
 from rest_framework.decorators import api_view
 from rest_framework.response import Response
@@ -92,9 +135,10 @@ from .models import Insurance
 from .serializers import InsuranceSerializer
 
 @api_view(['GET'])
+# @permission_classes([IsAdminUser])
 def edit_insurance(request, insurance_id):
     try:
-        insurance = Insurance.objects.filter(id=insurance_id).values('id', 'insurance_code', 'name').first()
+        insurance = Insurance.objects.filter(id=insurance_id).values('id', 'insurance_code', 'name', 'owner').first()
         if insurance:
             serializer = InsuranceSerializer(insurance)
             return Response({'insurance': serializer.data}, status=status.HTTP_200_OK)
@@ -109,20 +153,27 @@ from rest_framework import status
 from .models import Insurance
 from .serializers import InsuranceSerializer
 
+import logging
+
+logger = logging.getLogger(__name__)
+
 @api_view(['PUT'])
+# @permission_classes([IsAdminUser])
 def update(request, insurance_id):
     try:
         insurance = Insurance.objects.filter(id=insurance_id).first()
         if insurance:
             data = request.data
-            insurance.insurance_code = data.get('code')
+            insurance.insurance_code = data.get('insurance_code')
             insurance.name = data.get('name')
+            insurance.owner = data.get('owner')
             insurance.save()
             serializer = InsuranceSerializer(insurance)
             return Response({'message': 'Insurance updated successfully', 'insurance': serializer.data}, status=status.HTTP_200_OK)
         else:
             return Response({'error': 'Insurance not found'}, status=status.HTTP_404_NOT_FOUND)
     except Exception as e:
+        logger.error(f"Error updating insurance: {str(e)}")
         return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 from rest_framework.decorators import api_view
