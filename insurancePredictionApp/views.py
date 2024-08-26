@@ -152,6 +152,7 @@ from django.http import JsonResponse
 from patientApp.models import Client
 from patientApp.serializers import ClientSerializer
 from insuranceApp.models import Insurance
+from .models import Prediction
 
 # Pre-trained face detector
 face_detector = cv2.CascadeClassifier(cv2.data.haarcascades + 'haarcascade_frontalface_default.xml')
@@ -172,12 +173,12 @@ def get_image_from_base64(picture_data):
         if submitted_image is None:
             message = 'Image data is not valid.'
             logging.error(message)
-            return JsonResponse({'error': message}, status=400)
+            return None, JsonResponse({'error': message}, status=400)
 
         if not is_high_quality(submitted_image):
             message = 'Image quality is too low. Please submit a higher quality image.'
             logging.error(message)
-            return JsonResponse({'error': message}, status=400)
+            return None, JsonResponse({'error': message}, status=400)
 
         # Face detection using Haar Cascade Classifier
         faces = face_detector.detectMultiScale(submitted_image, scaleFactor=1.1, minNeighbors=5, minSize=(30, 30))
@@ -185,60 +186,49 @@ def get_image_from_base64(picture_data):
         if len(faces) == 0:
             message = 'No faces detected in the image. Please submit a picture with a face.'
             logging.error(message)
-            return JsonResponse({'error': message}, status=400)
+            return None, JsonResponse({'error': message}, status=400)
         elif len(faces) > 1:
             message = 'Multiple faces detected. Please submit a picture with only one person.'
             logging.error(message)
-            return JsonResponse({'error': message}, status=400)
+            return None, JsonResponse({'error': message}, status=400)
 
-        return submitted_image
+        return submitted_image, None
 
     except Exception as e:
         logging.error(f"Failed to decode base64 image: {e}")
-        return JsonResponse({'error': 'Failed to decode base64 image'}, status=400)
+        return None, JsonResponse({'error': 'Failed to decode base64 image'}, status=400)
 
 def compare_images_content(submitted_picture, existing_picture):
     try:
         # Convert submitted picture to RGB
         submitted_picture_rgb = cv2.cvtColor(submitted_picture, cv2.COLOR_BGR2RGB)
-
-        # Detect faces in the submitted picture
-        submitted_face_locations = face_recognition.face_locations(submitted_picture_rgb)
-        if not submitted_face_locations:
-            logging.error("No faces found in the submitted picture.")
-            return 0.0
-
-        # Encode faces in the submitted picture
-        submitted_encodings = face_recognition.face_encodings(submitted_picture_rgb, submitted_face_locations)
-        if not submitted_encodings:
-            logging.error("Failed to encode faces in the submitted picture.")
-            return 0.0
-
+        
         # Convert existing picture to RGB
         existing_picture_rgb = cv2.cvtColor(existing_picture, cv2.COLOR_BGR2RGB)
-        existing_face_locations = face_recognition.face_locations(existing_picture_rgb)
-        if not existing_face_locations:
-            logging.error("No faces found in existing picture.")
+
+        # Detect and encode faces in both pictures
+        submitted_encodings = face_recognition.face_encodings(submitted_picture_rgb)
+        existing_encodings = face_recognition.face_encodings(existing_picture_rgb)
+
+        if not submitted_encodings or not existing_encodings:
+            logging.error("Failed to encode faces in one or both pictures.")
             return 0.0
 
-        # Encode faces in the existing picture
-        existing_encodings = face_recognition.face_encodings(existing_picture_rgb, existing_face_locations)
-        if not existing_encodings:
-            logging.error("Failed to encode faces in existing picture.")
+        # Compare face encodings using face_distance
+        distances = face_recognition.face_distance(existing_encodings, submitted_encodings[0])
+        
+        if len(distances) == 0:
             return 0.0
 
-        # Compare face encodings
-        for existing_encoding in existing_encodings:
-            results = face_recognition.compare_faces(submitted_encodings, existing_encoding)
-            if True in results:
-                return 1.0  # High similarity
-
-        return 0.0  # Low similarity
+        # Convert distance to similarity score (lower distance = higher similarity)
+        best_match_score = 1 - min(distances)
+        
+        logging.info(f"Best match score: {best_match_score}")
+        return best_match_score
 
     except Exception as e:
         logging.error(f"Error comparing images: {e}")
         return 0.0
-
 @api_view(['POST'])
 def save_prediction(request):
     try:
@@ -256,19 +246,16 @@ def save_prediction(request):
         insurance = Insurance.objects.get(insurance_code=insurance_code)
         clients = Client.objects.filter(phone=phone)
         if not clients.exists():
-            data = Client.objects.filter(first_name=first_name, last_name=last_name, address=address, insurance=insurance)
-          
             # Remove the "data:image/jpeg;base64," part if it exists
             if ',' in picture_data:
                 picture_data = picture_data.split(',', 1)[1]
             picture_bytes = base64.b64decode(picture_data)
-            submitted_image = cv2.imdecode(np.frombuffer(picture_bytes, np.uint8), cv2.IMREAD_COLOR)
+            submitted_image, error_response = get_image_from_base64(picture_data)
+            if error_response:
+                return error_response  # Return error response from get_image_from_base64
 
-            submitted_image = get_image_from_base64(picture_data)
-            if isinstance(submitted_image, JsonResponse):
-                return submitted_image  # Return error response from get_image_from_base64
-
-            prediction = Prediction(
+            # Create a new Client instance with the provided data
+            data = Client(
                 first_name=first_name,
                 last_name=last_name,
                 phone=phone,
@@ -276,10 +263,9 @@ def save_prediction(request):
                 marital_status=marital_status,
                 insurance=insurance,
                 address=address,
-                picture=client.picture,
-                available=False
+                picture=picture_bytes,  # Save the raw picture bytes
             )
-            prediction.save()
+            data.save()
 
         client = clients.first()
 
@@ -298,9 +284,9 @@ def save_prediction(request):
         }
 
         # Convert submitted picture to a readable format
-        submitted_picture = get_image_from_base64(picture_data)
-        if isinstance(submitted_picture, JsonResponse):
-            return submitted_picture  # Return error response from get_image_from_base64
+        submitted_picture, error_response = get_image_from_base64(picture_data)
+        if error_response:
+            return error_response  # Return error response from get_image_from_base64
 
         # Convert stored picture to a readable format
         stored_picture = cv2.imdecode(np.frombuffer(client.picture, np.uint8), cv2.IMREAD_COLOR)
@@ -310,7 +296,10 @@ def save_prediction(request):
 
         # Compare picture contents
         picture_match = compare_images_content(submitted_picture, stored_picture)
-        comparison_results['picture'] = picture_match
+        comparison_results['picture'] = picture_match >= 0.8  # True if 80% or more similar, False otherwise
+
+        print(f'\n\nImage comparison score: {picture_match}\n\n')
+        print(f'Images match: {comparison_results["picture"]}\n\n')
 
         # Separate matched and mismatched data
         matched_data = {k: v for k, v in comparison_results.items() if v}
@@ -319,42 +308,25 @@ def save_prediction(request):
         # Determine availability
         available = all(comparison_results.values())
         
-        if available:
-            # Save the prediction data to the database
-            prediction = Prediction(
-                first_name=first_name,
-                last_name=last_name,
-                phone=phone,
-                gender=gender,
-                marital_status=marital_status,
-                insurance=client.insurance,  # Use the existing insurance object
-                address=address,
-                picture=client.picture,
-                available=True
-            )
-            prediction.save()
-        else:
-            # Save the prediction data to the database
-            prediction = Prediction(
-                first_name=first_name,
-                last_name=last_name,
-                phone=phone,
-                gender=gender,
-                marital_status=marital_status,
-                insurance=client.insurance,  # Use the existing insurance object
-                address=address,
-                picture=client.picture,
-                available=False
-            )
-            prediction.save()
+        # Save the prediction data to the database
+        prediction = Prediction(
+            first_name=first_name,
+            last_name=last_name,
+            phone=phone,
+            gender=gender,
+            marital_status=marital_status,
+            insurance=client.insurance,  # Use the existing insurance object
+            address=address,
+            picture=client.picture,
+            available=available
+        )
+        prediction.save()
 
         return Response({
             'matched_data': matched_data,
             'mismatched_data': mismatched_data,
             'serialized_client': serialized_client,
         }, status=status.HTTP_200_OK)
-
-        
 
     except Exception as e:
         logging.error(f"Error during image processing: {e}")

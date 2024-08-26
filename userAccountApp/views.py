@@ -36,6 +36,8 @@ from rest_framework.response import Response
 from rest_framework.decorators import api_view
 from rest_framework.pagination import PageNumberPagination
 from .serializers import UserSerializer
+import random
+import string
 
 @api_view(['GET'])
 def index(request):
@@ -119,7 +121,7 @@ def create_user(request):
 
     # Send activation email
     subject = 'Activate Your Account'
-    message = f'Hi {first_name},\n\n Welcome to Healthy Insurance Fraud detection System \n Your details are:\n Username: {username}\n Password: {password}\n\n Please click the link below to activate your account: \n\n'
+    message = f'Hi {first_name},\n\n Welcome to FraudGuardHealth System\n Your details are:\n Username: {username}\n Password: {password}\n\n'
     from_email = 'test'
     to_email = [email]
     send_mail(subject, message, from_email, to_email, fail_silently=False)
@@ -485,7 +487,7 @@ def contact_us(request):
             subject=f"Contact Us: {subject}",
             message=f"Name: {names}\nEmail: {email}\n\nDescription:\n{description}",
             from_email=email,
-            recipient_list=['princemugabe567@gmail.com'],
+            recipient_list=['mandelatwah@gmail.com'],
             fail_silently=False,
         )
         return Response({"message": "Email sent successfully."}, status=status.HTTP_200_OK)
